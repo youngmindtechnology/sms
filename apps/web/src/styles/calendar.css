@@ -1,0 +1,67 @@
+/* Academic calendar page. Design tokens only. */
+.muted { color: var(--color-text-muted); font-size: var(--text-sm); margin: 0 0 var(--space-3); }
+.notice { margin: 0; padding: var(--space-2) var(--space-3); font-size: var(--text-sm); border-radius: var(--radius-sm); }
+.notice--success { background: #dff3e6; color: #12572b; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+.confirm-bar {
+  display: flex; flex-direction: column; gap: var(--space-2);
+  padding: var(--space-4);
+  background: var(--yellow-100);
+  border: 1px solid var(--yellow-500);
+  border-radius: var(--radius-md);
+}
+.confirm-bar p { margin: 0; }
+.confirm-bar__title { font-weight: 700; }
+
+.period-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+.period-item {
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+.period-item--selected { border-color: var(--navy-600); box-shadow: inset 4px 0 0 var(--color-accent); }
+.period-item__main {
+  flex: 1 1 14rem; display: flex; flex-direction: column; gap: 2px; text-align: left;
+  background: none; border: 0; padding: 0; font: inherit; color: inherit; cursor: pointer;
+}
+.period-item__main:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+.period-item__name { font-weight: 700; color: var(--color-primary); }
+.period-item__dates { font-size: var(--text-sm); color: var(--color-text-muted); }
+.period-item__actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+.period-form {
+  display: flex; flex-direction: column; gap: var(--space-3);
+  margin-bottom: var(--space-4); padding: var(--space-4);
+  background: var(--navy-50); border-radius: var(--radius-md);
+}
+.period-form h3 { margin: 0; font-size: var(--text-lg); color: var(--color-primary); }
+.period-form__grid { display: grid; gap: var(--space-3); grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); }
+.period-form__actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.field { display: flex; flex-direction: column; gap: var(--space-1); }
+.field label { font-size: var(--text-sm); font-weight: 600; }
+.field input { min-height: 2.5rem; padding: 0 var(--space-3); font: inherit; border: 1px solid var(--gray-300); border-radius: var(--radius-md); background: var(--white); }
+.field input:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 1px; }
+.field input[aria-invalid='true'] { border-color: #b42318; }
+.field-error { margin: 0; font-size: var(--text-sm); color: #7a1212; }
+
+.table-wrap { overflow-x: auto; }
+.period-table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
+.period-table th, .period-table td { padding: var(--space-2) var(--space-3); text-align: left; border-bottom: 1px solid var(--color-border); vertical-align: middle; }
+.period-table thead th { color: var(--color-text-muted); font-weight: 600; white-space: nowrap; }
+.period-table tbody th { font-weight: 700; color: var(--color-primary); }
+.period-table__actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+
+/* Classes page */
+.check { display: inline-flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-3); font-size: var(--text-sm); }
+.row--inactive { color: var(--color-text-muted); }
+.row--inactive th { color: var(--color-text-muted); }
+.field select { min-height: 2.5rem; padding: 0 var(--space-3); font: inherit; border: 1px solid var(--gray-300); border-radius: var(--radius-md); background: var(--white); }
+.field select:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 1px; }
+.field select[aria-invalid='true'] { border-color: #b42318; }
+@media (max-width: 40rem) {
+  .period-table__actions .btn { min-height: 2.75rem; }
+}

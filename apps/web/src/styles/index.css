@@ -1,0 +1,8 @@
+/* Single stylesheet entry point. Order matters: later files win ties. */
+@import './tokens.css';
+@import './base.css';
+@import './ui.css';
+@import './layout.css';
+@import './dashboard.css';
+@import './auth.css';
+@import './calendar.css';

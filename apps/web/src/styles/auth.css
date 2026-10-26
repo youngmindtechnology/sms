@@ -1,0 +1,41 @@
+/* Sign-in, school picker and session states. Uses the shared design tokens only. */
+.auth-screen {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: var(--space-4);
+  background: var(--color-bg);
+}
+.auth-card {
+  width: 100%;
+  max-width: 24rem;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-6);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-top: 4px solid var(--color-accent);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+}
+.auth-card h1 { margin: 0 0 var(--space-2); font-size: var(--text-xl); color: var(--color-primary); }
+.auth-brand { margin: 0; font-size: var(--text-sm); font-weight: 700; color: var(--color-text-muted); }
+.auth-card label { margin-top: var(--space-2); font-size: var(--text-sm); font-weight: 600; }
+.auth-card input {
+  min-height: 2.5rem;
+  padding: 0 var(--space-3);
+  font: inherit;
+  border: 1px solid var(--gray-300);
+  border-radius: var(--radius-md);
+}
+.auth-card input:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 1px; }
+.auth-card .btn { margin-top: var(--space-4); }
+.auth-card .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.auth-note { margin: var(--space-2) 0 0; font-size: var(--text-sm); color: var(--color-text-muted); }
+.form-error { margin: var(--space-2) 0 0; padding: var(--space-2) var(--space-3); font-size: var(--text-sm); color: #7a1212; background: #fdecec; border-radius: var(--radius-sm); }
+.school-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+.school-list .btn { width: 100%; margin-top: 0; }
+.header-user { display: flex; align-items: center; gap: var(--space-3); margin-left: auto; }
+.header-user__text { display: flex; flex-direction: column; font-size: var(--text-sm); line-height: 1.2; text-align: right; }
+.header-user__role { color: var(--color-text-muted); font-size: 0.75rem; }

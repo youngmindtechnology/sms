@@ -1,0 +1,28 @@
+{
+  "name": "ymt-school-management",
+  "version": "0.1.0",
+  "private": true,
+  "engines": {
+    "node": ">=20.6"
+  },
+  "workspaces": [
+    "apps/web",
+    "apps/api",
+    "apps/web/database"
+  ],
+  "scripts": {
+  "dev:web": "npm run dev --workspace=web",
+  "build:web": "npm run build --workspace=web",
+  "lint:web": "npm run lint --workspace=web",
+  "db:validate": "node --env-file=./apps/web/database/.env ./apps/web/database/node_modules/prisma/build/index.js validate --schema ./apps/web/database/prisma/schema.prisma",
+  "db:migrate:status": "npm run db:migrate:status --workspace=@ymt/database",
+  "db:migrate:status:dev": "npm run db:migrate:status:dev --workspace=@ymt/database",
+  "db:migrate:status:test": "npm run db:migrate:status:test --workspace=@ymt/database",
+  "db:migrate:plan:test": "npm run db:migrate:plan:test --workspace=@ymt/database",
+  "db:migrate:deploy:test": "npm run db:migrate:deploy:test --workspace=@ymt/database",
+  "db:generate": "npm run prisma:generate --workspace=@ymt/database",
+  "db:test": "npm run db:test --workspace=@ymt/database",
+  "db:test:guard": "npm run test:guard --workspace=@ymt/database",
+  "db:target": "npm run db:target --workspace=@ymt/database"
+}
+}

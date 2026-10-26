@@ -1,0 +1,481 @@
+// YMT School Management: Prisma schema (Phase 2).
+//
+// This file MUST stay in step with the SQL in prisma/migrations/. Two
+// migrations exist:
+//   20261011000000_init                  : tables, enums, indexes, foreign keys
+//                                          (describes exactly what is below)
+//   20261011000100_integrity_constraints : CHECK / EXCLUDE / trigger rules that
+//                                          Prisma's schema language cannot express
+//
+// Naming: models and fields are PascalCase / camelCase in TypeScript, while the
+// database uses snake_case. @@map and @map connect the two.
+//
+// Tenant isolation: every school-owned table has a school_id, and links
+// between school-owned tables are COMPOSITE foreign keys that include
+// school_id (see the relations marked "composite"). See docs/database-design.md.
+//
+// Every foreign key is RESTRICT on delete and update. Nothing cascades.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum SchoolStatus {
+  ACTIVE
+  SUSPENDED
+
+  @@map("school_status")
+}
+
+enum UserStatus {
+  INVITED
+  ACTIVE
+  DISABLED
+
+  @@map("user_status")
+}
+
+enum MembershipStatus {
+  INVITED
+  ACTIVE
+  SUSPENDED
+  ENDED
+
+  @@map("membership_status")
+}
+
+enum SchoolRole {
+  OWNER
+  HEADTEACHER
+  ADMINISTRATOR
+  TEACHER
+  BURSAR
+
+  @@map("school_role")
+}
+
+enum PlatformRole {
+  SUPPORT
+  ADMIN
+
+  @@map("platform_role")
+}
+
+enum AcademicPeriodStatus {
+  PLANNED
+  ACTIVE
+  CLOSED
+
+  @@map("academic_period_status")
+}
+
+enum SchoolLevel {
+  NURSERY
+  KINDERGARTEN
+  PRIMARY
+  JHS
+
+  @@map("school_level")
+}
+
+enum StudentStatus {
+  ACTIVE
+  WITHDRAWN
+  TRANSFERRED_OUT
+  GRADUATED
+
+  @@map("student_status")
+}
+
+enum GuardianRelationship {
+  MOTHER
+  FATHER
+  GRANDPARENT
+  SIBLING
+  UNCLE_OR_AUNT
+  OTHER_RELATIVE
+  LEGAL_GUARDIAN
+  OTHER
+
+  @@map("guardian_relationship")
+}
+
+enum EnrollmentStatus {
+  ENROLLED
+  PROMOTED
+  REPEATED
+  CLASS_CHANGED
+  WITHDRAWN
+  COMPLETED
+
+  @@map("enrollment_status")
+}
+
+// ---------------------------------------------------------------------------
+// Tenant and identity
+// ---------------------------------------------------------------------------
+
+model School {
+  id           String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  code         String       @unique
+  name         String
+  status       SchoolStatus @default(ACTIVE)
+  contactEmail String?      @map("contact_email")
+  contactPhone String?      @map("contact_phone")
+  address      String?
+  createdAt    DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  supportAccessGrants SupportAccessGrant[]
+  memberships         SchoolMembership[]
+  academicYears       AcademicYear[]
+  terms               Term[]
+  classes             Class[]
+  subjects            Subject[]
+  students            Student[]
+  guardians           Guardian[]
+  studentGuardians    StudentGuardian[]
+  enrollments         Enrollment[]
+  auditEvents         AuditEvent[]
+
+  @@map("schools")
+}
+
+model User {
+  id        String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email     String     @unique
+  fullName  String     @map("full_name")
+  status    UserStatus @default(INVITED)
+  createdAt DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime   @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  platformStaff      PlatformStaff?
+  credential         UserCredential?
+  sessions           Session[]
+  memberships        SchoolMembership[]
+  grantsMade         SupportAccessGrant[] @relation("GrantedBy")
+  auditEventsActed   AuditEvent[]
+
+  @@map("users")
+}
+
+/// Marks a user as YMT platform staff. Grants NO school access by itself.
+model PlatformStaff {
+  userId    String       @id @map("user_id") @db.Uuid
+  role      PlatformRole
+  createdAt DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user   User                 @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  grants SupportAccessGrant[] @relation("GrantedTo")
+
+  @@map("platform_staff")
+}
+
+/// Time-boxed, reasoned access of one staff member to one school.
+/// The 7-day cap and non-empty reason are CHECK constraints in the SQL migration.
+model SupportAccessGrant {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  schoolId        String    @map("school_id") @db.Uuid
+  staffUserId     String    @map("staff_user_id") @db.Uuid
+  grantedByUserId String    @map("granted_by_user_id") @db.Uuid
+  reason          String
+  startsAt        DateTime  @map("starts_at") @db.Timestamptz(3)
+  expiresAt       DateTime  @map("expires_at") @db.Timestamptz(3)
+  revokedAt       DateTime? @map("revoked_at") @db.Timestamptz(3)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  school    School        @relation(fields: [schoolId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  staff     PlatformStaff @relation("GrantedTo", fields: [staffUserId], references: [userId], onDelete: Restrict, onUpdate: Restrict)
+  grantedBy User          @relation("GrantedBy", fields: [grantedByUserId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([schoolId])
+  @@index([staffUserId])
+  @@map("support_access_grants")
+}
+
+model SchoolMembership {
+  id        String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  schoolId  String           @map("school_id") @db.Uuid
+  userId    String           @map("user_id") @db.Uuid
+  status    MembershipStatus @default(INVITED)
+  endedAt   DateTime?        @map("ended_at") @db.Timestamptz(3)
+  createdAt DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  school School                 @relation(fields: [schoolId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  user   User                   @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  roles  SchoolMembershipRole[]
+  sessions Session[]
+
+  @@unique([schoolId, userId])
+  @@index([userId])
+  @@map("school_memberships")
+}
+
+/// A membership may hold several roles (primary key is membership + role).
+model SchoolMembershipRole {
+  membershipId String     @map("membership_id") @db.Uuid
+  role         SchoolRole
+  grantedAt    DateTime   @default(now()) @map("granted_at") @db.Timestamptz(3)
+
+  membership SchoolMembership @relation(fields: [membershipId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@id([membershipId, role])
+  @@map("school_membership_roles")
+}
+
+// ---------------------------------------------------------------------------
+// Academic structure (school-defined)
+// ---------------------------------------------------------------------------
+
+model AcademicYear {
+  id        String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  schoolId  String               @map("school_id") @db.Uuid
+  name      String
+  startDate DateTime             @map("start_date") @db.Date
+  endDate   DateTime             @map("end_date") @db.Date
+  status    AcademicPeriodStatus @default(PLANNED)
+  createdAt DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime             @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  school      School       @relation(fields: [schoolId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  terms       Term[]
+  enrollments Enrollment[]
+
+  @@unique([schoolId, name])
+  @@unique([id, schoolId])
+  @@map("academic_years")
+}
+
+model Term {
+  id             String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  schoolId       String               @map("school_id") @db.Uuid
+  academicYearId String               @map("academic_year_id") @db.Uuid
+  name           String
+  sequence       Int                  @db.SmallInt
+  startDate      DateTime             @map("start_date") @db.Date
+  endDate        DateTime             @map("end_date") @db.Date
+  status         AcademicPeriodStatus @default(PLANNED)
+  createdAt      DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime             @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  school       School       @relation(fields: [schoolId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  // composite: the year must belong to the same school as the term
+  academicYear AcademicYear @relation(fields: [academicYearId, schoolId], references: [id, schoolId], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([academicYearId, sequence])
+  @@unique([academicYearId, name])
+  @@unique([id, schoolId])
+  @@index([schoolId])
+  @@map("terms")
+}
+
+model Class {
+  id        String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  schoolId  String      @map("school_id") @db.Uuid
+  name      String
+  level     SchoolLevel
+  sortOrder Int         @default(0) @map("sort_order")
+  isActive  Boolean     @default(true) @map("is_active")
+  createdAt DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  school      School       @relation(fields: [schoolId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  enrollments Enrollment[]
+
+  @@unique([schoolId, name])
+  @@unique([id, schoolId])
+  @@map("classes")
+}
+
+model Subject {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  schoolId  String   @map("school_id") @db.Uuid
+  name      String
+  code      String?
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  school School @relation(fields: [schoolId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([schoolId, name])
+  @@unique([schoolId, code])
+  @@unique([id, schoolId])
+  @@map("subjects")
+}
+
+// ---------------------------------------------------------------------------
+// People
+// ---------------------------------------------------------------------------
+
+/// Identity profile only. Class placement lives in Enrollment (history kept).
+model Student {
+  id              String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  schoolId        String        @map("school_id") @db.Uuid
+  admissionNumber String        @map("admission_number")
+  firstName       String        @map("first_name")
+  middleName      String?       @map("middle_name")
+  lastName        String        @map("last_name")
+  dateOfBirth     DateTime?     @map("date_of_birth") @db.Date
+  admittedOn      DateTime?     @map("admitted_on") @db.Date
+  status          StudentStatus @default(ACTIVE)
+  createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  school      School            @relation(fields: [schoolId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  guardians   StudentGuardian[]
+  enrollments Enrollment[]
+
+  // Unique inside one school, reusable across schools.
+  @@unique([schoolId, admissionNumber])
+  @@unique([id, schoolId])
+  @@index([schoolId, lastName, firstName])
+  @@map("students")
+}
+
+model Guardian {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  schoolId  String   @map("school_id") @db.Uuid
+  fullName  String   @map("full_name")
+  phone     String?
+  email     String?
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  school   School            @relation(fields: [schoolId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  students StudentGuardian[]
+
+  @@unique([id, schoolId])
+  @@index([schoolId, phone])
+  @@map("guardians")
+}
+
+/// Many-to-many link. Both ends are composite keys, so a student of school A
+/// can never be linked to a guardian of school B.
+model StudentGuardian {
+  studentId        String               @map("student_id") @db.Uuid
+  guardianId       String               @map("guardian_id") @db.Uuid
+  schoolId         String               @map("school_id") @db.Uuid
+  relationship     GuardianRelationship
+  isPrimaryContact Boolean              @default(false) @map("is_primary_contact")
+  createdAt        DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  school   School   @relation(fields: [schoolId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  // composite
+  student  Student  @relation(fields: [studentId, schoolId], references: [id, schoolId], onDelete: Restrict, onUpdate: Restrict)
+  // composite
+  guardian Guardian @relation(fields: [guardianId, schoolId], references: [id, schoolId], onDelete: Restrict, onUpdate: Restrict)
+
+  @@id([studentId, guardianId])
+  @@index([guardianId, schoolId])
+  @@index([studentId, schoolId])
+  @@map("student_guardians")
+}
+
+// ---------------------------------------------------------------------------
+// Enrollment (history)
+// ---------------------------------------------------------------------------
+
+/// A student's placement in a class for a period. Promotions and class changes
+/// add rows; old rows are never overwritten. endDate is the INCLUSIVE last day.
+/// No-overlap per student is an EXCLUDE constraint in the SQL migration.
+model Enrollment {
+  id             String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  schoolId       String           @map("school_id") @db.Uuid
+  studentId      String           @map("student_id") @db.Uuid
+  classId        String           @map("class_id") @db.Uuid
+  academicYearId String           @map("academic_year_id") @db.Uuid
+  status         EnrollmentStatus @default(ENROLLED)
+  startDate      DateTime         @map("start_date") @db.Date
+  endDate        DateTime?        @map("end_date") @db.Date
+  createdAt      DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  school       School       @relation(fields: [schoolId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  // composite: student, class and year must all belong to this enrollment's school
+  student      Student      @relation(fields: [studentId, schoolId], references: [id, schoolId], onDelete: Restrict, onUpdate: Restrict)
+  class        Class        @relation(fields: [classId, schoolId], references: [id, schoolId], onDelete: Restrict, onUpdate: Restrict)
+  academicYear AcademicYear @relation(fields: [academicYearId, schoolId], references: [id, schoolId], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([studentId])
+  @@index([schoolId, academicYearId, classId])
+  @@index([classId, schoolId])
+  @@map("enrollments")
+}
+
+// ---------------------------------------------------------------------------
+// Audit foundation
+// ---------------------------------------------------------------------------
+
+/// Append-only (UPDATE/DELETE/TRUNCATE are rejected by triggers in the SQL
+/// migration). metadata holds ids and changed field NAMES only, never secrets.
+/// schoolId is null for platform-level events.
+model AuditEvent {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  schoolId    String?  @map("school_id") @db.Uuid
+  actorUserId String?  @map("actor_user_id") @db.Uuid
+  action      String
+  entityType  String   @map("entity_type")
+  entityId    String?  @map("entity_id") @db.Uuid
+  metadata    Json     @default("{}")
+  occurredAt  DateTime @default(now()) @map("occurred_at") @db.Timestamptz(3)
+
+  school School? @relation(fields: [schoolId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  actor  User?   @relation(fields: [actorUserId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([schoolId, occurredAt])
+  @@index([entityType, entityId])
+  @@index([actorUserId])
+  @@map("audit_events")
+}
+
+// ---------------------------------------------------------------------------
+// Authentication (migration 20261012000000_auth_credentials_sessions)
+// ---------------------------------------------------------------------------
+
+/// Password hash, kept apart from `users` so it is never selected by accident.
+model UserCredential {
+  userId            String    @id @map("user_id") @db.Uuid
+  passwordHash      String    @map("password_hash")
+  algorithm         String
+  passwordChangedAt DateTime  @default(now()) @map("password_changed_at") @db.Timestamptz(3)
+  failedLoginCount  Int       @default(0) @map("failed_login_count")
+  lockedUntil       DateTime? @map("locked_until") @db.Timestamptz(3)
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@map("user_credentials")
+}
+
+/// Server-side session. Only SHA-256 hashes of the cookie and CSRF tokens are stored.
+model Session {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId        String    @map("user_id") @db.Uuid
+  tokenHash     Bytes     @unique @map("token_hash")
+  csrfTokenHash Bytes     @map("csrf_token_hash")
+  activeSchoolId String?  @map("active_school_id") @db.Uuid
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  lastSeenAt    DateTime  @default(now()) @map("last_seen_at") @db.Timestamptz(3)
+  expiresAt     DateTime  @map("expires_at") @db.Timestamptz(3)
+  revokedAt     DateTime? @map("revoked_at") @db.Timestamptz(3)
+  revokedReason String?   @map("revoked_reason")
+
+  user       User              @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  membership SchoolMembership? @relation(fields: [activeSchoolId, userId], references: [schoolId, userId], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
