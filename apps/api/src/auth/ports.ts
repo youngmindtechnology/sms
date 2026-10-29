@@ -20,6 +20,8 @@ export interface CredentialRecord {
   algorithm: "argon2id" | "scrypt";
   failedLoginCount: number;
   lockedUntil: Date | null;
+  /** True for a temporary password handed out by a school administrator: the person must choose their own first. */
+  mustChangePassword: boolean;
 }
 
 export interface MembershipRecord {
@@ -69,7 +71,11 @@ export interface AuthRepository {
   listMemberships(userId: string): Promise<MembershipRecord[]>;
   recordFailedLogin(userId: string, lockUntil: Date | null): Promise<void>;
   recordSuccessfulLogin(userId: string): Promise<void>;
-  replacePasswordHash(userId: string, hash: string, algorithm: "argon2id" | "scrypt", changedAt: Date): Promise<void>;
+  /**
+   * Stores a new hash. The must-change flag is only cleared when `clearMustChange` is true (the person
+   * chose their own password); a silent hash upgrade at login must never clear it.
+   */
+  replacePasswordHash(userId: string, hash: string, algorithm: "argon2id" | "scrypt", changedAt: Date, clearMustChange?: boolean): Promise<void>;
   createSession(session: NewSession): Promise<SessionRecord>;
   findSessionByTokenHash(tokenHash: Buffer): Promise<SessionRecord | null>;
   touchSession(sessionId: string, at: Date): Promise<void>;

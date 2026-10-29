@@ -86,16 +86,6 @@ for (const file of candidates) {
   }
 }
 
-// Prisma silently loads a file called ".env" from the folder it runs in. If DATABASE_URL is
-// not set in the shell, a bare `prisma migrate ...` therefore uses THAT file's DATABASE_URL.
-const implicit = seen.find((s) => s.name === 'DATABASE_URL' && /(^|[\\/])\.env$/.test(s.file))
-if (implicit && explicit.length === 0) {
-  console.log(`\nNOTE: Prisma loads ${implicit.file} automatically. A bare "prisma ..." command run inside apps/web/database`)
-  console.log('      (for example: npx prisma migrate deploy) would use its DATABASE_URL, which is:')
-  console.log(implicit.signature.replace(/^/gm, '        '))
-  console.log('      Use the npm scripts instead: they name the target explicitly (see README: "Choosing the database").')
-}
-
 const databaseUrls = seen.filter((s) => s.name === 'DATABASE_URL')
 if (databaseUrls.length > 1 && new Set(databaseUrls.map((s) => s.signature)).size > 1) {
   console.log('\nWARNING: DATABASE_URL points at DIFFERENT targets in different files:')

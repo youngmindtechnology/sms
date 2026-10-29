@@ -60,13 +60,23 @@ REVOKE ALL ON ALL TABLES IN SCHEMA public FROM ymt_app_runtime;
 REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM ymt_app_runtime;
 REVOKE ALL ON ALL FUNCTIONS IN SCHEMA public FROM ymt_app_runtime;
 
--- Read-only reference data: who exists, which schools, which memberships and roles.
-GRANT SELECT ON schools, users, school_memberships, school_membership_roles TO ymt_app_runtime;
+-- Reference data: schools are read-only for the API.
+GRANT SELECT ON schools TO ymt_app_runtime;
 
--- Credentials: read the hash to verify a login; update only the columns a login or a
--- password change touches. No INSERT or DELETE (the operator command creates them).
-GRANT SELECT ON user_credentials TO ymt_app_runtime;
-GRANT UPDATE (password_hash, algorithm, password_changed_at, failed_login_count, locked_until, updated_at)
+-- Staff management (Phase 5). The API may create a person (user + credential + membership + roles)
+-- and change a membership's status and roles. It still cannot UPDATE or DELETE a user, delete a
+-- membership or a credential, or re-point a membership/credential to another school or user.
+GRANT SELECT, INSERT ON users TO ymt_app_runtime;
+GRANT SELECT, INSERT ON school_memberships TO ymt_app_runtime;
+GRANT UPDATE (status, ended_at, updated_at) ON school_memberships TO ymt_app_runtime;
+-- Role rows have no history of their own (the audit trail records each change), so replacing a
+-- person's roles inserts and deletes rows. A row can never be moved to another membership.
+GRANT SELECT, INSERT, DELETE ON school_membership_roles TO ymt_app_runtime;
+
+-- Credentials: read the hash to verify a login; create one for a new person; update only the
+-- columns a login, a password change or a staff password reset touches. No DELETE.
+GRANT SELECT, INSERT ON user_credentials TO ymt_app_runtime;
+GRANT UPDATE (password_hash, algorithm, password_changed_at, failed_login_count, locked_until, must_change_password, updated_at)
   ON user_credentials TO ymt_app_runtime;
 
 -- Sessions: create, read, expire-clean, and update only the mutable columns.
@@ -84,6 +94,30 @@ GRANT UPDATE (name, sequence, start_date, end_date, status, updated_at) ON terms
 -- history for enrollments. school_id can never be changed.
 GRANT SELECT, INSERT ON classes TO ymt_app_runtime;
 GRANT UPDATE (name, level, sort_order, is_active, updated_at) ON classes TO ymt_app_runtime;
+
+-- Students (Phase 4): read, create, and change only the profile columns and the status. No
+-- DELETE: a student who leaves is given a status, never removed. school_id and id are fixed.
+GRANT SELECT, INSERT ON students TO ymt_app_runtime;
+GRANT UPDATE (admission_number, first_name, middle_name, last_name, date_of_birth, admitted_on, status, updated_at)
+  ON students TO ymt_app_runtime;
+
+-- Guardians (Phase 4): read, create, edit contact details. No DELETE: a guardian may be linked to
+-- several students, and is only ever un-linked, not removed.
+GRANT SELECT, INSERT ON guardians TO ymt_app_runtime;
+GRANT UPDATE (full_name, phone, email, updated_at) ON guardians TO ymt_app_runtime;
+
+-- Student-guardian links (Phase 4): the ONE place DELETE is granted. A link is a plain relationship
+-- row with no history of its own (the audit trail records who linked or un-linked and when), and
+-- "safe unlink" must remove it. Only the relationship and primary flag can be edited; the student
+-- and guardian of a link can never be re-pointed.
+GRANT SELECT, INSERT, DELETE ON student_guardians TO ymt_app_runtime;
+GRANT UPDATE (relationship, is_primary_contact) ON student_guardians TO ymt_app_runtime;
+
+-- Enrollments (Phase 4): read, create, and change only the status and end date (this is how a class
+-- change ends the old row and keeps it as history). No DELETE; student, class, year and start date
+-- can never be changed.
+GRANT SELECT, INSERT ON enrollments TO ymt_app_runtime;
+GRANT UPDATE (status, end_date, updated_at) ON enrollments TO ymt_app_runtime;
 
 -- Audit trail: append and read. The table's triggers also reject UPDATE/DELETE/TRUNCATE.
 GRANT SELECT, INSERT ON audit_events TO ymt_app_runtime;

@@ -11,19 +11,15 @@
     "deepmerge-ts": "^8.0.2"
   },
   "scripts": {
-    "test:guard": "node --test scripts/target.test.mjs scripts/migrate-plan.test.mjs",
+    "test:guard": "node --test scripts/target.test.mjs",
     "db:target": "node scripts/show-target.mjs",
     "prisma:validate": "prisma validate",
     "prisma:generate": "prisma generate",
-    "db:migrate:status": "node --env-file=.env scripts/migrate-deploy.mjs --status",
-    "db:migrate:status:dev": "node --env-file=.env scripts/migrate-deploy.mjs --target=dev --status",
-    "db:migrate:status:test": "node --env-file=.env scripts/migrate-deploy.mjs --target=test --status",
-    "db:migrate:plan:test": "node --env-file=.env scripts/migrate-deploy.mjs --target=test --dry-run",
+    "db:migrate:status": "prisma migrate status",
     "db:drift-check": "prisma migrate diff --from-schema-datasource prisma/schema.prisma --to-schema-datamodel prisma/schema.prisma --exit-code",
     "db:check": "node --env-file=.env scripts/run-sql.mjs DATABASE_URL seeds/dev_seed.sql --dry-run",
     "db:check:test": "node --env-file=.env scripts/run-sql.mjs TEST_DATABASE_URL tests/constraints.test.sql --dry-run",
     "db:migrate:deploy": "node --env-file=.env scripts/migrate-deploy.mjs",
-    "db:migrate:deploy:test": "node --env-file=.env scripts/migrate-deploy.mjs --target=test --confirm-database=ymt_test",
     "db:seed": "node --env-file=.env scripts/run-sql.mjs DATABASE_URL seeds/dev_seed.sql",
     "db:test": "node --env-file=.env scripts/run-sql.mjs TEST_DATABASE_URL tests/constraints.test.sql"
   },

@@ -41,3 +41,11 @@ test("only owner, headteacher and administrator can manage classes; every role c
   for (const role of ["TEACHER", "BURSAR"]) assert.equal(can([role], "classes:manage"), false, role);
   for (const role of ["OWNER", "HEADTEACHER", "ADMINISTRATOR", "TEACHER", "BURSAR"]) assert.equal(can([role], "school:read"), true, role);
 });
+
+test("only owner, headteacher and administrator can see dates of birth and guardian contact details", () => {
+  for (const role of ["OWNER", "HEADTEACHER", "ADMINISTRATOR"]) assert.equal(can([role], "students:sensitive"), true, role);
+  for (const role of ["TEACHER", "BURSAR"]) {
+    assert.equal(can([role], "students:sensitive"), false, role);
+    assert.equal(can([role], "students:read"), true, `${role} can still read students`);
+  }
+});

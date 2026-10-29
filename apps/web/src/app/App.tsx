@@ -8,6 +8,9 @@ import { ClassesPage } from '../pages/ClassesPage'
 import { DashboardPage } from '../pages/DashboardPage'
 import { NotFoundPage } from '../pages/NotFoundPage'
 import { PlaceholderPage } from '../pages/PlaceholderPage'
+import { StaffPage } from '../pages/StaffPage'
+import { StudentProfilePage } from '../pages/StudentProfilePage'
+import { StudentsPage } from '../pages/StudentsPage'
 import { navItems } from './navigation'
 
 /**
@@ -26,6 +29,9 @@ export default function App() {
           <Route index element={<DashboardPage />} />
           <Route path="calendar" element={<CalendarPage />} />
           <Route path="classes" element={<ClassesPage />} />
+          <Route path="staff" element={<StaffPage />} />
+          <Route path="students" element={<StudentsPage />} />
+          <Route path="students/:studentId" element={<StudentProfilePage />} />
           {navItems
             .filter((item) => item.status === 'planned')
             .map((item) => (

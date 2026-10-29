@@ -24,7 +24,8 @@ export function createAuthRouter(auth: AuthService, config: AppConfig, options: 
   const router = Router();
   const loginLimiter = options.loginLimiter ?? new RateLimiter({ windowMs: 15 * 60_000, limit: 20 });
   const passwordLimiter = options.passwordLimiter ?? new RateLimiter({ windowMs: 15 * 60_000, limit: 10 });
-  const authenticated = requireAuth(auth, config);
+  // Open even while a temporary password is pending: these are the only routes that let the person fix it.
+  const authenticated = requireAuth(auth, config, { allowPasswordChangePending: true });
 
   router.use(noStore);
 
@@ -43,6 +44,7 @@ export function createAuthRouter(auth: AuthService, config: AppConfig, options: 
       user: result.user,
       schools: result.schools,
       activeSchoolId: result.activeSchoolId,
+      mustChangePassword: result.mustChangePassword,
       csrfToken: result.csrfToken,
       expiresAt: result.expiresAt.toISOString(),
     });
@@ -57,6 +59,7 @@ export function createAuthRouter(auth: AuthService, config: AppConfig, options: 
         ? { id: context.school.id, name: context.school.name, roles: context.school.roles, permissions: [...context.school.permissions].sort() }
         : null,
       schools: context.schools,
+      mustChangePassword: context.mustChangePassword,
       csrfToken: auth.csrfTokenFor(token),
     });
   });
@@ -67,7 +70,7 @@ export function createAuthRouter(auth: AuthService, config: AppConfig, options: 
     return void res.status(204).end();
   });
 
-  router.post("/switch-school", authenticated, async (req, res) => {
+  router.post("/switch-school", requireAuth(auth, config), async (req, res) => {
     const body = switchBody.safeParse(req.body);
     if (!body.success) return void res.status(400).json(invalidRequest);
     const result = await auth.switchSchool(getAuth(res)!, body.data.schoolId);

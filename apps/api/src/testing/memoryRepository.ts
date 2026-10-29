@@ -13,11 +13,11 @@ export class MemoryRepository implements AuthRepository {
 
   constructor(private readonly clock: () => Date = () => new Date()) {}
 
-  addUser(user: Omit<UserRecord, "id"> & { id?: string }, credential?: Pick<CredentialRecord, "passwordHash" | "algorithm">): UserRecord {
+  addUser(user: Omit<UserRecord, "id"> & { id?: string }, credential?: Pick<CredentialRecord, "passwordHash" | "algorithm"> & { mustChangePassword?: boolean }): UserRecord {
     const record: UserRecord = { id: user.id ?? randomUUID(), email: user.email, fullName: user.fullName, status: user.status };
     this.users.set(record.id, record);
     if (credential) {
-      this.credentials.set(record.id, { userId: record.id, ...credential, failedLoginCount: 0, lockedUntil: null });
+      this.credentials.set(record.id, { userId: record.id, ...credential, mustChangePassword: credential.mustChangePassword ?? false, failedLoginCount: 0, lockedUntil: null });
     }
     return record;
   }
@@ -46,10 +46,11 @@ export class MemoryRepository implements AuthRepository {
     c.failedLoginCount = 0;
     c.lockedUntil = null;
   }
-  async replacePasswordHash(userId: string, hash: string, algorithm: "argon2id" | "scrypt") {
+  async replacePasswordHash(userId: string, hash: string, algorithm: "argon2id" | "scrypt", _changedAt?: Date, clearMustChange = false) {
     const c = this.credentials.get(userId)!;
     c.passwordHash = hash;
     c.algorithm = algorithm;
+    if (clearMustChange) c.mustChangePassword = false;
   }
 
   async createSession(input: NewSession) {

@@ -1,0 +1,13 @@
+/* Staff page. Design tokens only. */
+.staff-sub { display: block; font-size: var(--text-sm); font-weight: 400; color: var(--color-text-muted); }
+.role-fieldset { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); margin: 0; padding: 0; border: 0; }
+.role-fieldset legend { padding: 0; margin-bottom: var(--space-1); font-size: var(--text-sm); font-weight: 600; }
+.role-fieldset--inline { align-items: center; }
+.role-fieldset .check { margin-bottom: 0; }
+.secret-bar__value { margin: 0; }
+.secret-bar__value code {
+  display: inline-block; padding: var(--space-2) var(--space-3);
+  font-size: var(--text-lg); letter-spacing: 0.04em;
+  background: var(--white); border: 1px dashed var(--navy-600); border-radius: var(--radius-sm);
+  user-select: all; word-break: break-all;
+}

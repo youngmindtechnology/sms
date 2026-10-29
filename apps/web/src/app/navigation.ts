@@ -44,7 +44,7 @@ export const navItems: NavItem[] = [
     path: '/students',
     label: 'Students',
     icon: Users,
-    status: 'planned',
+    status: 'available',
     description: 'Student registration, profiles and guardian details.',
   },
   {
@@ -79,8 +79,8 @@ export const navItems: NavItem[] = [
     path: '/staff',
     label: 'Staff',
     icon: UserCog,
-    status: 'planned',
-    description: 'Teacher and staff records and assignments.',
+    status: 'available',
+    description: 'Staff accounts, roles and access for your school.',
   },
   {
     path: '/settings',
@@ -91,6 +91,10 @@ export const navItems: NavItem[] = [
   },
 ]
 
+/** Exact match first; a nested page such as /students/123 belongs to /students. */
 export function findNavItem(pathname: string): NavItem | undefined {
-  return navItems.find((item) => item.path === pathname)
+  return (
+    navItems.find((item) => item.path === pathname) ??
+    navItems.find((item) => item.path !== '/' && pathname.startsWith(`${item.path}/`))
+  )
 }

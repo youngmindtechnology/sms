@@ -4,11 +4,19 @@ import helmet from "helmet";
 import type { AcademicService } from "./academic/academicService.js";
 import type { AuthService } from "./auth/authService.js";
 import type { ClassService } from "./classes/classService.js";
+import type { EnrollmentService } from "./students/enrollmentService.js";
+import type { GuardianService } from "./students/guardianService.js";
+import type { StudentService } from "./students/studentService.js";
 import type { AppConfig } from "./config.js";
 import { errorHandler } from "./http/middleware.js";
 import healthRouter from "./routes/health.js";
 import { createAcademicRouter } from "./routes/academic.js";
 import { createClassRouter } from "./routes/classes.js";
+import { createEnrollmentRouter } from "./routes/enrollments.js";
+import { createGuardianRouter } from "./routes/guardians.js";
+import { createStaffRouter } from "./routes/staff.js";
+import { createStudentRouter } from "./routes/students.js";
+import type { StaffService } from "./staff/staffService.js";
 import { createAuthRouter, type AuthRouteOptions } from "./routes/auth.js";
 
 export interface AppOptions {
@@ -17,6 +25,9 @@ export interface AppOptions {
   auth?: AuthService;
   academic?: AcademicService;
   classes?: ClassService;
+  staff?: StaffService;
+  /** Students, guardians and enrollments are enabled together. */
+  students?: { students: StudentService; guardians: GuardianService; enrollments: EnrollmentService };
   authRoutes?: AuthRouteOptions;
 }
 
@@ -66,6 +77,17 @@ export function createApp(options: AppOptions = {}) {
 
   if (options.config && options.auth && options.classes) {
     app.use("/api/classes", createClassRouter(options.auth, options.classes, options.config));
+  }
+
+  if (options.config && options.auth && options.students) {
+    const { students, guardians, enrollments } = options.students;
+    app.use("/api/students", createStudentRouter(options.auth, students, guardians, enrollments, options.config));
+    app.use("/api/guardians", createGuardianRouter(options.auth, guardians, options.config));
+    app.use("/api/enrollments", createEnrollmentRouter(options.auth, enrollments, options.config));
+  }
+
+  if (options.config && options.auth && options.staff) {
+    app.use("/api/staff", createStaffRouter(options.auth, options.staff, options.config));
   }
 
   app.use(errorHandler);

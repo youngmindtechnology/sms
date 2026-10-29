@@ -1,5 +1,6 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom'
 import { Button } from '../components/ui/Button'
+import { ChangePasswordScreen } from './ChangePasswordScreen'
 import { useAuth } from './AuthContext'
 import { SchoolPicker } from './SchoolPicker'
 
@@ -31,6 +32,8 @@ export function ProtectedRoute() {
   if (status === 'signedOut' || !me) {
     return <Navigate to="/login" replace state={{ from: location.pathname }} />
   }
+  // A temporary password must be replaced before anything else; the server refuses every other call until then.
+  if (me.mustChangePassword) return <ChangePasswordScreen />
   if (!me.school) return <SchoolPicker />
   return <Outlet />
 }

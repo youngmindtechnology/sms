@@ -451,6 +451,8 @@ model UserCredential {
   passwordChangedAt DateTime  @default(now()) @map("password_changed_at") @db.Timestamptz(3)
   failedLoginCount  Int       @default(0) @map("failed_login_count")
   lockedUntil       DateTime? @map("locked_until") @db.Timestamptz(3)
+  // True while the password is a temporary one handed out by a school administrator.
+  mustChangePassword Boolean  @default(false) @map("must_change_password")
   createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt         DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
 

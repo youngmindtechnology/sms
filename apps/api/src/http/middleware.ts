@@ -62,7 +62,7 @@ export function rateLimit(limiter: RateLimiter, keyOf: (req: Request) => string 
  * trusted Origin and a matching X-CSRF-Token header. 401 = not signed in; 403 = signed
  * in but the request is not allowed.
  */
-export function requireAuth(auth: AuthService, config: AppConfig): RequestHandler {
+export function requireAuth(auth: AuthService, config: AppConfig, options: { allowPasswordChangePending?: boolean } = {}): RequestHandler {
   return async (req, res, next) => {
     const token = readCookie(req.headers.cookie, config.session.cookieName);
     if (!looksLikeToken(token)) return void unauthenticated(res);
@@ -75,6 +75,8 @@ export function requireAuth(auth: AuthService, config: AppConfig): RequestHandle
       if (!isTrustedOrigin(req.get("origin"), config.frontendOrigin)) return void forbidden(res, "bad_origin");
       if (!(await auth.csrfMatches(token, req.get("x-csrf-token")))) return void forbidden(res, "bad_csrf");
     }
+    // A temporary password must be replaced first. Only "who am I", change-password and logout stay open.
+    if (context.mustChangePassword && !options.allowPasswordChangePending) return void forbidden(res, "password_change_required");
     res.locals.auth = context;
     res.locals.sessionToken = token;
     next();

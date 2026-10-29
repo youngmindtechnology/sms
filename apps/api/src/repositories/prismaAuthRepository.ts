@@ -20,13 +20,14 @@ export function createPrismaAuthRepository(db: PrismaClient): AuthRepository {
   const bytes = (value: Uint8Array): Uint8Array<ArrayBuffer> => new Uint8Array(value);
 
   const toCredential = (c: {
-    userId: string; passwordHash: string; algorithm: string; failedLoginCount: number; lockedUntil: Date | null;
+    userId: string; passwordHash: string; algorithm: string; failedLoginCount: number; lockedUntil: Date | null; mustChangePassword: boolean;
   }): CredentialRecord => ({
     userId: c.userId,
     passwordHash: c.passwordHash,
     algorithm: c.algorithm === "scrypt" ? "scrypt" : "argon2id",
     failedLoginCount: c.failedLoginCount,
     lockedUntil: c.lockedUntil,
+    mustChangePassword: c.mustChangePassword,
   });
 
   const toUser = (u: { id: string; email: string; fullName: string; status: string }): UserRecord => ({
@@ -89,10 +90,10 @@ export function createPrismaAuthRepository(db: PrismaClient): AuthRepository {
       await db.userCredential.update({ where: { userId }, data: { failedLoginCount: 0, lockedUntil: null } });
     },
 
-    async replacePasswordHash(userId, hash, algorithm, changedAt) {
+    async replacePasswordHash(userId, hash, algorithm, changedAt, clearMustChange = false) {
       await db.userCredential.update({
         where: { userId },
-        data: { passwordHash: hash, algorithm, passwordChangedAt: changedAt },
+        data: { passwordHash: hash, algorithm, passwordChangedAt: changedAt, ...(clearMustChange ? { mustChangePassword: false } : {}) },
       });
     },
 

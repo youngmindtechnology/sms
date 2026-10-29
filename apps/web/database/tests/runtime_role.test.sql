@@ -101,6 +101,17 @@ INSERT INTO academic_years (id, school_id, name, start_date, end_date)
 INSERT INTO terms (id, school_id, academic_year_id, name, sequence, start_date, end_date)
   VALUES ('80000000-0000-4000-8000-0000000000a1', '10000000-0000-4000-8000-0000000000a1', '30000000-0000-4000-8000-0000000000a1', 'Term 1', 1, '2026-09-01', '2026-12-18');
 
+INSERT INTO students (id, school_id, admission_number, first_name, last_name)
+  VALUES ('50000000-0000-4000-8000-0000000000a1', '10000000-0000-4000-8000-0000000000a1', 'ADM/001', 'Ama', 'Mensah'),
+         ('50000000-0000-4000-8000-0000000000a2', '10000000-0000-4000-8000-0000000000a1', 'ADM/002', 'Kofi', 'Mensah');
+INSERT INTO guardians (id, school_id, full_name)
+  VALUES ('60000000-0000-4000-8000-0000000000a1', '10000000-0000-4000-8000-0000000000a1', 'Test Guardian');
+INSERT INTO student_guardians (student_id, guardian_id, school_id, relationship, is_primary_contact)
+  VALUES ('50000000-0000-4000-8000-0000000000a1', '60000000-0000-4000-8000-0000000000a1', '10000000-0000-4000-8000-0000000000a1', 'MOTHER', true);
+INSERT INTO enrollments (id, school_id, student_id, class_id, academic_year_id, start_date, end_date)
+  VALUES ('90000000-0000-4000-8000-0000000000a1', '10000000-0000-4000-8000-0000000000a1', '50000000-0000-4000-8000-0000000000a1',
+          '40000000-0000-4000-8000-0000000000a1', '30000000-0000-4000-8000-0000000000a1', '2026-09-01', '2027-07-31');
+
 -- ---- Role attributes ----------------------------------------------------
 SELECT pg_temp.expect_true('role is not a superuser and has no create-db/create-role/replication/bypass-RLS',
   $$ SELECT NOT rolsuper AND NOT rolcreatedb AND NOT rolcreaterole AND NOT rolreplication AND NOT rolbypassrls
@@ -123,11 +134,16 @@ SELECT pg_temp.expect_true('table privileges are EXACTLY the documented allow-li
          FROM information_schema.role_table_grants
         WHERE grantee = 'ymt_app_runtime' AND table_schema = 'public'),
      expected(p) AS (VALUES
-       ('schools:SELECT'), ('users:SELECT'), ('school_memberships:SELECT'), ('school_membership_roles:SELECT'),
-       ('user_credentials:SELECT'),
+       ('schools:SELECT'), ('users:SELECT'), ('users:INSERT'),
+       ('school_memberships:SELECT'), ('school_memberships:INSERT'),
+       ('school_membership_roles:SELECT'), ('school_membership_roles:INSERT'), ('school_membership_roles:DELETE'),
+       ('user_credentials:SELECT'), ('user_credentials:INSERT'),
        ('sessions:SELECT'), ('sessions:INSERT'), ('sessions:DELETE'),
        ('academic_years:SELECT'), ('academic_years:INSERT'), ('terms:SELECT'), ('terms:INSERT'),
        ('classes:SELECT'), ('classes:INSERT'),
+       ('students:SELECT'), ('students:INSERT'), ('guardians:SELECT'), ('guardians:INSERT'),
+       ('student_guardians:SELECT'), ('student_guardians:INSERT'), ('student_guardians:DELETE'),
+       ('enrollments:SELECT'), ('enrollments:INSERT'),
        ('audit_events:SELECT'), ('audit_events:INSERT'))
      SELECT NOT EXISTS (SELECT p FROM actual EXCEPT SELECT p FROM expected)
         AND NOT EXISTS (SELECT p FROM expected EXCEPT SELECT p FROM actual) $$);
@@ -138,11 +154,18 @@ SELECT pg_temp.expect_true('column-level UPDATE is limited to the documented col
         WHERE grantee = 'ymt_app_runtime' AND table_schema = 'public' AND privilege_type = 'UPDATE'),
      expected(c) AS (VALUES
        ('user_credentials.password_hash'), ('user_credentials.algorithm'), ('user_credentials.password_changed_at'),
-       ('user_credentials.failed_login_count'), ('user_credentials.locked_until'), ('user_credentials.updated_at'),
+       ('user_credentials.failed_login_count'), ('user_credentials.locked_until'), ('user_credentials.must_change_password'),
+       ('user_credentials.updated_at'),
+       ('school_memberships.status'), ('school_memberships.ended_at'), ('school_memberships.updated_at'),
        ('sessions.active_school_id'), ('sessions.last_seen_at'), ('sessions.revoked_at'), ('sessions.revoked_reason'),
        ('academic_years.name'), ('academic_years.start_date'), ('academic_years.end_date'), ('academic_years.status'), ('academic_years.updated_at'),
        ('terms.name'), ('terms.sequence'), ('terms.start_date'), ('terms.end_date'), ('terms.status'), ('terms.updated_at'),
-       ('classes.name'), ('classes.level'), ('classes.sort_order'), ('classes.is_active'), ('classes.updated_at'))
+       ('classes.name'), ('classes.level'), ('classes.sort_order'), ('classes.is_active'), ('classes.updated_at'),
+       ('students.admission_number'), ('students.first_name'), ('students.middle_name'), ('students.last_name'),
+       ('students.date_of_birth'), ('students.admitted_on'), ('students.status'), ('students.updated_at'),
+       ('guardians.full_name'), ('guardians.phone'), ('guardians.email'), ('guardians.updated_at'),
+       ('student_guardians.relationship'), ('student_guardians.is_primary_contact'),
+       ('enrollments.status'), ('enrollments.end_date'), ('enrollments.updated_at'))
      SELECT NOT EXISTS (SELECT c FROM actual EXCEPT SELECT c FROM expected)
         AND NOT EXISTS (SELECT c FROM expected EXCEPT SELECT c FROM actual) $$);
 
@@ -164,6 +187,22 @@ SELECT pg_temp.as_runtime_expect_ok('can revoke a session',
   $$ UPDATE sessions SET revoked_at = now(), revoked_reason = 'logout' WHERE id = 'a0000000-0000-4000-8000-000000000001' $$);
 SELECT pg_temp.as_runtime_expect_ok('can delete a session (expired-session cleanup)',
   $$ DELETE FROM sessions WHERE token_hash = decode(repeat('12', 32), 'hex') $$);
+SELECT pg_temp.as_runtime_expect_ok('can create a person: user, credential, membership and role',
+  $$ WITH u AS (INSERT INTO users (id, email, full_name, status) VALUES ('20000000-0000-4000-8000-000000000002', 'teacher@example.test', 'Test Teacher', 'ACTIVE') RETURNING id),
+          c AS (INSERT INTO user_credentials (user_id, password_hash, algorithm, must_change_password)
+                VALUES ('20000000-0000-4000-8000-000000000002', '$argon2id$v=19$m=19456,t=2,p=1$ZmFrZXNhbHQ$ZmFrZWhhc2hmb3J0ZXN0aW5n', 'argon2id', true) RETURNING user_id),
+          m AS (INSERT INTO school_memberships (id, school_id, user_id, status) VALUES ('70000000-0000-4000-8000-0000000000a2', '10000000-0000-4000-8000-0000000000a1', '20000000-0000-4000-8000-000000000002', 'ACTIVE') RETURNING id)
+     INSERT INTO school_membership_roles (membership_id, role) SELECT id, 'TEACHER' FROM m $$);
+SELECT pg_temp.as_runtime_expect_ok('can replace a membership''s roles (delete one row, add another)',
+  $$ DELETE FROM school_membership_roles WHERE membership_id = '70000000-0000-4000-8000-0000000000a2';
+     INSERT INTO school_membership_roles (membership_id, role) VALUES ('70000000-0000-4000-8000-0000000000a2', 'BURSAR') $$);
+SELECT pg_temp.as_runtime_expect_ok('can suspend, end and reactivate a membership (ended_at set then cleared)',
+  $$ UPDATE school_memberships SET status = 'SUSPENDED', updated_at = now() WHERE id = '70000000-0000-4000-8000-0000000000a2';
+     UPDATE school_memberships SET status = 'ENDED', ended_at = now(), updated_at = now() WHERE id = '70000000-0000-4000-8000-0000000000a2';
+     UPDATE school_memberships SET status = 'ACTIVE', ended_at = NULL, updated_at = now() WHERE id = '70000000-0000-4000-8000-0000000000a2' $$);
+SELECT pg_temp.as_runtime_expect_ok('can set and clear must_change_password',
+  $$ UPDATE user_credentials SET must_change_password = true, updated_at = now() WHERE user_id = '20000000-0000-4000-8000-000000000002';
+     UPDATE user_credentials SET must_change_password = false, updated_at = now() WHERE user_id = '20000000-0000-4000-8000-000000000002' $$);
 SELECT pg_temp.as_runtime_expect_ok('can append an audit event',
   $$ INSERT INTO audit_events (action, entity_type, metadata) VALUES ('auth.login.succeeded', 'session', '{}') $$);
 SELECT pg_temp.as_runtime_expect_ok('can read academic years and terms',
@@ -182,12 +221,41 @@ SELECT pg_temp.as_runtime_expect_ok('can create a class',
   $$ INSERT INTO classes (school_id, name, level, sort_order) VALUES ('10000000-0000-4000-8000-0000000000a1', 'KG 1', 'KINDERGARTEN', 2) $$);
 SELECT pg_temp.as_runtime_expect_ok('can rename, reorder and deactivate a class',
   $$ UPDATE classes SET name = 'Basic 1B', level = 'PRIMARY', sort_order = 5, is_active = false, updated_at = now() WHERE id = '40000000-0000-4000-8000-0000000000a1' $$);
+SELECT pg_temp.as_runtime_expect_ok('can read students, guardians, links and enrollments',
+  $$ SELECT (SELECT count(*) FROM students) + (SELECT count(*) FROM guardians) + (SELECT count(*) FROM student_guardians) + (SELECT count(*) FROM enrollments) $$);
+SELECT pg_temp.as_runtime_expect_ok('can register a student',
+  $$ INSERT INTO students (school_id, admission_number, first_name, last_name) VALUES ('10000000-0000-4000-8000-0000000000a1', 'ADM/003', 'Esi', 'Boateng') $$);
+SELECT pg_temp.as_runtime_expect_ok('can edit a student profile and status',
+  $$ UPDATE students SET first_name = 'Akua', admission_number = 'ADM/001A', date_of_birth = '2015-05-05', admitted_on = '2026-09-01', status = 'WITHDRAWN', updated_at = now() WHERE id = '50000000-0000-4000-8000-0000000000a1' $$);
+SELECT pg_temp.as_runtime_expect_ok('can create and edit a guardian',
+  $$ WITH g AS (INSERT INTO guardians (school_id, full_name, phone) VALUES ('10000000-0000-4000-8000-0000000000a1', 'Second Guardian', '+233241234567') RETURNING id)
+     UPDATE guardians SET full_name = 'Renamed Guardian', email = 'g@example.test', updated_at = now() WHERE id IN (SELECT id FROM g) $$);
+SELECT pg_temp.as_runtime_expect_ok('can link a guardian and change the relationship and primary flag',
+  $$ INSERT INTO student_guardians (student_id, guardian_id, school_id, relationship) VALUES ('50000000-0000-4000-8000-0000000000a2', '60000000-0000-4000-8000-0000000000a1', '10000000-0000-4000-8000-0000000000a1', 'FATHER');
+     UPDATE student_guardians SET relationship = 'LEGAL_GUARDIAN', is_primary_contact = true WHERE student_id = '50000000-0000-4000-8000-0000000000a2' $$);
+SELECT pg_temp.as_runtime_expect_ok('can un-link a guardian (delete the link row only)',
+  $$ DELETE FROM student_guardians WHERE student_id = '50000000-0000-4000-8000-0000000000a2' $$);
+SELECT pg_temp.as_runtime_expect_ok('can enroll a student',
+  $$ INSERT INTO enrollments (school_id, student_id, class_id, academic_year_id, start_date, end_date)
+     VALUES ('10000000-0000-4000-8000-0000000000a1', '50000000-0000-4000-8000-0000000000a2', '40000000-0000-4000-8000-0000000000a1', '30000000-0000-4000-8000-0000000000a1', '2026-09-01', '2027-07-31') $$);
+SELECT pg_temp.as_runtime_expect_ok('can end an enrollment as a class change (status and end date)',
+  $$ UPDATE enrollments SET status = 'CLASS_CHANGED', end_date = '2026-11-30', updated_at = now() WHERE id = '90000000-0000-4000-8000-0000000000a1' $$);
 SELECT pg_temp.as_runtime_expect_ok('can read audit events',
   $$ SELECT count(*) FROM audit_events $$);
 
 -- ---- What the API must NOT be able to do: SQLSTATE 42501 ----------------
-SELECT pg_temp.as_runtime_expect_error('cannot insert a user (no public registration through the API database role)',
-  $$ INSERT INTO users (email, full_name) VALUES ('new@example.test', 'New') $$, '42501');
+SELECT pg_temp.as_runtime_expect_error('cannot delete a membership',
+  $$ DELETE FROM school_memberships $$, '42501');
+SELECT pg_temp.as_runtime_expect_error('cannot move a membership to another school',
+  $$ UPDATE school_memberships SET school_id = '10000000-0000-4000-8000-0000000000b1' $$, '42501');
+SELECT pg_temp.as_runtime_expect_error('cannot move a membership to another user',
+  $$ UPDATE school_memberships SET user_id = '20000000-0000-4000-8000-000000000001' $$, '42501');
+SELECT pg_temp.as_runtime_expect_error('cannot change a role row in place (only delete and insert)',
+  $$ UPDATE school_membership_roles SET role = 'OWNER' $$, '42501');
+SELECT pg_temp.as_runtime_expect_error('cannot truncate role rows',
+  $$ TRUNCATE school_membership_roles $$, '42501');
+SELECT pg_temp.as_runtime_expect_error('cannot re-point a credential to another user (second check)',
+  $$ UPDATE user_credentials SET user_id = '20000000-0000-4000-8000-000000000001' $$, '42501');
 SELECT pg_temp.as_runtime_expect_error('cannot update a user (cannot self-activate or change status)',
   $$ UPDATE users SET status = 'ACTIVE' $$, '42501');
 SELECT pg_temp.as_runtime_expect_error('cannot delete a user',
@@ -196,14 +264,6 @@ SELECT pg_temp.as_runtime_expect_error('cannot insert or modify schools',
   $$ UPDATE schools SET name = 'Hacked' $$, '42501');
 SELECT pg_temp.as_runtime_expect_error('cannot insert a school',
   $$ INSERT INTO schools (code, name) VALUES ('rogue-school', 'Rogue') $$, '42501');
-SELECT pg_temp.as_runtime_expect_error('cannot grant itself a membership',
-  $$ INSERT INTO school_memberships (school_id, user_id) VALUES ('10000000-0000-4000-8000-0000000000a1', '20000000-0000-4000-8000-000000000001') $$, '42501');
-SELECT pg_temp.as_runtime_expect_error('cannot grant itself a role',
-  $$ INSERT INTO school_membership_roles (membership_id, role) VALUES ('70000000-0000-4000-8000-0000000000b1', 'OWNER') $$, '42501');
-SELECT pg_temp.as_runtime_expect_error('cannot change a membership status',
-  $$ UPDATE school_memberships SET status = 'ACTIVE' $$, '42501');
-SELECT pg_temp.as_runtime_expect_error('cannot create a credential',
-  $$ INSERT INTO user_credentials (user_id, password_hash, algorithm) VALUES ('20000000-0000-4000-8000-000000000001', '$argon2id$v=19$m=19456,t=2,p=1$ZmFrZXNhbHQ$ZmFrZWhhc2hmb3J0ZXN0aW5n', 'argon2id') $$, '42501');
 SELECT pg_temp.as_runtime_expect_error('cannot delete a credential',
   $$ DELETE FROM user_credentials $$, '42501');
 SELECT pg_temp.as_runtime_expect_error('cannot re-point a credential to another user',
@@ -234,12 +294,28 @@ SELECT pg_temp.as_runtime_expect_error('cannot delete a class',
   $$ DELETE FROM classes $$, '42501');
 SELECT pg_temp.as_runtime_expect_error('cannot move a class to another school',
   $$ UPDATE classes SET school_id = '10000000-0000-4000-8000-0000000000b1' $$, '42501');
-SELECT pg_temp.as_runtime_expect_error('cannot read students (no grant yet in Phase 2)',
-  $$ SELECT count(*) FROM students $$, '42501');
-SELECT pg_temp.as_runtime_expect_error('cannot read enrollments',
-  $$ SELECT count(*) FROM enrollments $$, '42501');
-SELECT pg_temp.as_runtime_expect_error('cannot read guardians',
-  $$ SELECT count(*) FROM guardians $$, '42501');
+SELECT pg_temp.as_runtime_expect_error('cannot delete a student',
+  $$ DELETE FROM students $$, '42501');
+SELECT pg_temp.as_runtime_expect_error('cannot move a student to another school',
+  $$ UPDATE students SET school_id = '10000000-0000-4000-8000-0000000000b1' $$, '42501');
+SELECT pg_temp.as_runtime_expect_error('cannot delete a guardian',
+  $$ DELETE FROM guardians $$, '42501');
+SELECT pg_temp.as_runtime_expect_error('cannot move a guardian to another school',
+  $$ UPDATE guardians SET school_id = '10000000-0000-4000-8000-0000000000b1' $$, '42501');
+SELECT pg_temp.as_runtime_expect_error('cannot re-point a link to another student',
+  $$ UPDATE student_guardians SET student_id = '50000000-0000-4000-8000-0000000000a2' $$, '42501');
+SELECT pg_temp.as_runtime_expect_error('cannot re-point a link to another guardian',
+  $$ UPDATE student_guardians SET guardian_id = '60000000-0000-4000-8000-0000000000a1' $$, '42501');
+SELECT pg_temp.as_runtime_expect_error('cannot truncate links',
+  $$ TRUNCATE student_guardians $$, '42501');
+SELECT pg_temp.as_runtime_expect_error('cannot delete an enrollment',
+  $$ DELETE FROM enrollments $$, '42501');
+SELECT pg_temp.as_runtime_expect_error('cannot move an enrollment to another class',
+  $$ UPDATE enrollments SET class_id = '40000000-0000-4000-8000-0000000000a1' $$, '42501');
+SELECT pg_temp.as_runtime_expect_error('cannot move an enrollment to another student',
+  $$ UPDATE enrollments SET student_id = '50000000-0000-4000-8000-0000000000a2' $$, '42501');
+SELECT pg_temp.as_runtime_expect_error('cannot rewrite an enrollment start date',
+  $$ UPDATE enrollments SET start_date = '2020-01-01' $$, '42501');
 SELECT pg_temp.as_runtime_expect_error('cannot read platform staff',
   $$ SELECT count(*) FROM platform_staff $$, '42501');
 SELECT pg_temp.as_runtime_expect_error('cannot read support access grants',
@@ -259,10 +335,9 @@ SELECT pg_temp.as_runtime_expect_error('cannot create a role',
 -- PostgreSQL only WARNS (it does not error) when a role tries to grant what it cannot
 -- grant, so the check is that the attempt changes nothing.
 SELECT pg_temp.as_runtime_expect_ok('a GRANT attempt by the role is accepted but ineffective (PostgreSQL warns only)',
-  $$ GRANT INSERT, UPDATE, DELETE ON users TO ymt_app_runtime $$);
-SELECT pg_temp.expect_true('the role still cannot insert, update or delete users after trying to grant itself that',
-  $$ SELECT NOT has_table_privilege('ymt_app_runtime', 'users', 'INSERT')
-        AND NOT has_table_privilege('ymt_app_runtime', 'users', 'UPDATE')
+  $$ GRANT UPDATE, DELETE ON users TO ymt_app_runtime $$);
+SELECT pg_temp.expect_true('the role still cannot update or delete users after trying to grant itself that',
+  $$ SELECT NOT has_table_privilege('ymt_app_runtime', 'users', 'UPDATE')
         AND NOT has_table_privilege('ymt_app_runtime', 'users', 'DELETE') $$);
 
 -- The fixtures and the role are discarded by the ROLLBACK below.

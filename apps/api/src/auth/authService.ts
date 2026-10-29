@@ -20,6 +20,8 @@ export interface AuthContext {
   school: { id: string; name: string; roles: string[]; permissions: Set<Permission> } | null;
   /** Schools the user may switch to right now. */
   schools: SchoolChoice[];
+  /** A temporary password is still in use: only changing it (and signing out) is allowed until it is replaced. */
+  mustChangePassword: boolean;
 }
 
 export interface LoginSuccess {
@@ -30,6 +32,7 @@ export interface LoginSuccess {
   user: { id: string; email: string; fullName: string };
   activeSchoolId: string | null;
   schools: SchoolChoice[];
+  mustChangePassword: boolean;
 }
 /** One failure shape for every reason, so the client cannot tell them apart. */
 export interface LoginFailure {
@@ -123,6 +126,7 @@ export function createAuthService(repo: AuthRepository, config: AuthConfig, now:
       user: { id: user.id, email: user.email, fullName: user.fullName },
       activeSchoolId,
       schools: schools.map(toChoice),
+      mustChangePassword: credential.mustChangePassword,
     };
   }
 
@@ -140,6 +144,7 @@ export function createAuthService(repo: AuthRepository, config: AuthConfig, now:
     // Touch at most once a minute to avoid a write on every request.
     if (at.getTime() - session.lastSeenAt.getTime() > 60_000) await repo.touchSession(session.id, at);
 
+    const mustChangePassword = (await repo.findCredential(user.id))?.mustChangePassword ?? false;
     const schools = usableMemberships(await repo.listMemberships(user.id));
     const current = session.activeSchoolId ? schools.find((m) => m.schoolId === session.activeSchoolId) : undefined;
     return {
@@ -149,6 +154,7 @@ export function createAuthService(repo: AuthRepository, config: AuthConfig, now:
         ? { id: current.schoolId, name: current.schoolName, roles: current.roles, permissions: permissionsFor(current.roles) }
         : null,
       schools: schools.map(toChoice),
+      mustChangePassword,
     };
   }
 
@@ -213,7 +219,7 @@ export function createAuthService(repo: AuthRepository, config: AuthConfig, now:
 
     const at = now();
     const next = await hashPassword(newPassword);
-    await repo.replacePasswordHash(ctx.user.id, next.hash, next.algorithm, at);
+    await repo.replacePasswordHash(ctx.user.id, next.hash, next.algorithm, at, true);
     // Every other session of this user ends; the current one continues.
     const revoked = await repo.revokeUserSessions(ctx.user.id, at, "password_changed", ctx.sessionId);
     await recordAudit(repo, {

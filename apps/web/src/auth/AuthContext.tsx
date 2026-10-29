@@ -11,6 +11,7 @@ interface AuthValue {
   login: (email: string, password: string) => Promise<void>
   logout: () => Promise<void>
   switchSchool: (schoolId: string) => Promise<void>
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>
   reload: () => Promise<void>
   can: (permission: string) => boolean
 }
@@ -75,6 +76,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [load],
   )
 
+  const changePassword = useCallback(
+    async (currentPassword: string, newPassword: string) => {
+      await api('/api/auth/change-password', { method: 'POST', body: { currentPassword, newPassword }, skipUnauthorizedHandler: true })
+      await load()
+    },
+    [load],
+  )
+
   const value = useMemo<AuthValue>(
     () => ({
       status,
@@ -82,10 +91,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       login,
       logout,
       switchSchool,
+      changePassword,
       reload: load,
       can: (permission) => me?.school?.permissions.includes(permission) ?? false,
     }),
-    [status, me, login, logout, switchSchool, load],
+    [status, me, login, logout, switchSchool, changePassword, load],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
