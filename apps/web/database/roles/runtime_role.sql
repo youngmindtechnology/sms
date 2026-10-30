@@ -33,6 +33,9 @@ BEGIN
   IF to_regclass('public.sessions') IS NULL OR to_regclass('public.user_credentials') IS NULL THEN
     RAISE EXCEPTION 'Apply the migration 20261012000000_auth_credentials_sessions first (tables sessions and user_credentials are missing).';
   END IF;
+  IF to_regclass('public.teaching_assignments') IS NULL THEN
+    RAISE EXCEPTION 'Apply the migration 20261029000000_class_subjects_and_teaching_assignments first (table teaching_assignments is missing).';
+  END IF;
 END $$;
 
 -- 1. The role. LOGIN without a password cannot authenticate until \password is run.
@@ -118,6 +121,17 @@ GRANT UPDATE (relationship, is_primary_contact) ON student_guardians TO ymt_app_
 -- can never be changed.
 GRANT SELECT, INSERT ON enrollments TO ymt_app_runtime;
 GRANT UPDATE (status, end_date, updated_at) ON enrollments TO ymt_app_runtime;
+
+-- Subjects (Phase 6): read, create, and change only the editable columns. No DELETE: a subject that
+-- has been taught is history. school_id and class_id can never be changed (a subject cannot move class).
+GRANT SELECT, INSERT ON subjects TO ymt_app_runtime;
+GRANT UPDATE (name, code, is_active, updated_at) ON subjects TO ymt_app_runtime;
+
+-- Teaching assignments (Phase 6): read, create, and change only the status and end time (this is how
+-- an assignment is ended or replaced; the row stays as history). No DELETE. The subject, year and
+-- teacher of an assignment can never be re-pointed.
+GRANT SELECT, INSERT ON teaching_assignments TO ymt_app_runtime;
+GRANT UPDATE (status, ended_at, updated_at) ON teaching_assignments TO ymt_app_runtime;
 
 -- Audit trail: append and read. The table's triggers also reject UPDATE/DELETE/TRUNCATE.
 GRANT SELECT, INSERT ON audit_events TO ymt_app_runtime;

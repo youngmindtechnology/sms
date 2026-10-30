@@ -11,6 +11,8 @@ import { prisma } from "./lib/prisma.js";
 import { createPrismaAcademicRepository } from "./repositories/prismaAcademicRepository.js";
 import { createPrismaClassRepository } from "./repositories/prismaClassRepository.js";
 import { createPrismaStaffRepository } from "./repositories/prismaStaffRepository.js";
+import { createPrismaSubjectRepository } from "./repositories/prismaSubjectRepository.js";
+import { createSubjectService } from "./subjects/subjectService.js";
 import { createStaffService } from "./staff/staffService.js";
 import { createPrismaStudentRepository } from "./repositories/prismaStudentRepository.js";
 import { createPrismaAuthRepository } from "./repositories/prismaAuthRepository.js";
@@ -40,7 +42,8 @@ const students = {
   enrollments: createEnrollmentService(studentRepository),
 };
 const staff = createStaffService(createPrismaStaffRepository(prisma));
-const app = createApp({ config, auth, academic, classes, students, staff });
+const subjects = createSubjectService(createPrismaSubjectRepository(prisma));
+const app = createApp({ config, auth, academic, classes, students, staff, subjects });
 
 app.listen(config.port, () => {
   console.log(`YMT API listening on http://localhost:${config.port}`);

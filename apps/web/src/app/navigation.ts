@@ -58,8 +58,8 @@ export const navItems: NavItem[] = [
     path: '/academics',
     label: 'Academics',
     icon: BookOpen,
-    status: 'planned',
-    description: 'Subjects, assessments and score entry.',
+    status: 'available',
+    description: 'Subjects for each class and the teachers assigned to them. Assessments and score entry come later.',
   },
   {
     path: '/report-cards',

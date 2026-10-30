@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { Button } from '../../components/ui/Button'
 import { describeError, fieldErrors } from './messages'
+import { academicYearName } from './yearName'
 
 export interface PeriodValues {
   name: string
@@ -12,7 +13,7 @@ export interface PeriodValues {
 
 interface PeriodFormProps {
   title: string
-  /** Terms have a number; academic years don't. */
+  /** Terms have a name and a number. Academic years have neither: the year's name comes from its dates. */
   withSequence?: boolean
   initial?: PeriodValues
   submitLabel: string
@@ -30,11 +31,13 @@ export function PeriodForm({ title, withSequence = false, initial, submitLabel, 
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [general, setGeneral] = useState<string | null>(null)
 
+  const yearName = academicYearName(startDate, endDate)
+
   async function submit(event: FormEvent) {
     event.preventDefault()
     if (busy) return
     const local: Record<string, string> = {}
-    if (!name.trim()) local.name = 'Enter a name.'
+    if (withSequence && !name.trim()) local.name = 'Enter a name.'
     if (!startDate) local.startDate = 'Choose a start date.'
     if (!endDate) local.endDate = 'Choose an end date.'
     if (startDate && endDate && endDate <= startDate) local.endDate = 'The end date must be after the start date.'
@@ -46,7 +49,7 @@ export function PeriodForm({ title, withSequence = false, initial, submitLabel, 
     setBusy(true)
     try {
       await onSubmit({
-        name: name.trim(),
+        name: withSequence ? name.trim() : yearName,
         startDate,
         endDate,
         ...(withSequence && sequence !== '' ? { sequence: Number(sequence) } : {}),
@@ -62,11 +65,13 @@ export function PeriodForm({ title, withSequence = false, initial, submitLabel, 
     <form className="period-form" onSubmit={submit} noValidate aria-label={title}>
       <h3>{title}</h3>
       <div className="period-form__grid">
-        <div className="field">
-          <label htmlFor="period-name">Name</label>
-          <input id="period-name" value={name} maxLength={50} onChange={(e) => setName(e.target.value)} aria-invalid={Boolean(errors.name)} aria-describedby={errors.name ? 'period-name-error' : undefined} />
-          {errors.name ? <p id="period-name-error" className="field-error">{errors.name}</p> : null}
-        </div>
+        {withSequence ? (
+          <div className="field">
+            <label htmlFor="period-name">Name</label>
+            <input id="period-name" value={name} maxLength={50} placeholder="e.g. First Term" onChange={(e) => setName(e.target.value)} aria-invalid={Boolean(errors.name)} aria-describedby={errors.name ? 'period-name-error' : undefined} />
+            {errors.name ? <p id="period-name-error" className="field-error">{errors.name}</p> : null}
+          </div>
+        ) : null}
         {withSequence ? (
           <div className="field">
             <label htmlFor="period-seq">Term number (optional)</label>
@@ -85,6 +90,12 @@ export function PeriodForm({ title, withSequence = false, initial, submitLabel, 
           {errors.endDate ? <p className="field-error">{errors.endDate}</p> : null}
         </div>
       </div>
+      {!withSequence ? (
+        <p className="muted" aria-live="polite">
+          {yearName ? <>Academic year name: <strong>{yearName}</strong></> : 'The name (for example 2026/2027) is made from the start and end dates.'}
+        </p>
+      ) : null}
+      {!withSequence && errors.name ? <p className="field-error">{errors.name}</p> : null}
       {general ? <p className="form-error" role="alert">{general}</p> : null}
       <div className="period-form__actions">
         <Button type="submit" variant="primary" disabled={busy}>{busy ? 'Saving…' : submitLabel}</Button>

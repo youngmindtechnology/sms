@@ -112,6 +112,12 @@ INSERT INTO enrollments (id, school_id, student_id, class_id, academic_year_id, 
   VALUES ('90000000-0000-4000-8000-0000000000a1', '10000000-0000-4000-8000-0000000000a1', '50000000-0000-4000-8000-0000000000a1',
           '40000000-0000-4000-8000-0000000000a1', '30000000-0000-4000-8000-0000000000a1', '2026-09-01', '2027-07-31');
 
+INSERT INTO subjects (id, school_id, class_id, name, code)
+  VALUES ('44000000-0000-4000-8000-0000000000a1', '10000000-0000-4000-8000-0000000000a1', '40000000-0000-4000-8000-0000000000a1', 'Mathematics', 'MATH');
+INSERT INTO teaching_assignments (id, school_id, subject_id, academic_year_id, user_id)
+  VALUES ('45000000-0000-4000-8000-0000000000a1', '10000000-0000-4000-8000-0000000000a1', '44000000-0000-4000-8000-0000000000a1',
+          '30000000-0000-4000-8000-0000000000a1', '20000000-0000-4000-8000-000000000001');
+
 -- ---- Role attributes ----------------------------------------------------
 SELECT pg_temp.expect_true('role is not a superuser and has no create-db/create-role/replication/bypass-RLS',
   $$ SELECT NOT rolsuper AND NOT rolcreatedb AND NOT rolcreaterole AND NOT rolreplication AND NOT rolbypassrls
@@ -144,6 +150,7 @@ SELECT pg_temp.expect_true('table privileges are EXACTLY the documented allow-li
        ('students:SELECT'), ('students:INSERT'), ('guardians:SELECT'), ('guardians:INSERT'),
        ('student_guardians:SELECT'), ('student_guardians:INSERT'), ('student_guardians:DELETE'),
        ('enrollments:SELECT'), ('enrollments:INSERT'),
+       ('subjects:SELECT'), ('subjects:INSERT'), ('teaching_assignments:SELECT'), ('teaching_assignments:INSERT'),
        ('audit_events:SELECT'), ('audit_events:INSERT'))
      SELECT NOT EXISTS (SELECT p FROM actual EXCEPT SELECT p FROM expected)
         AND NOT EXISTS (SELECT p FROM expected EXCEPT SELECT p FROM actual) $$);
@@ -165,7 +172,9 @@ SELECT pg_temp.expect_true('column-level UPDATE is limited to the documented col
        ('students.date_of_birth'), ('students.admitted_on'), ('students.status'), ('students.updated_at'),
        ('guardians.full_name'), ('guardians.phone'), ('guardians.email'), ('guardians.updated_at'),
        ('student_guardians.relationship'), ('student_guardians.is_primary_contact'),
-       ('enrollments.status'), ('enrollments.end_date'), ('enrollments.updated_at'))
+       ('enrollments.status'), ('enrollments.end_date'), ('enrollments.updated_at'),
+       ('subjects.name'), ('subjects.code'), ('subjects.is_active'), ('subjects.updated_at'),
+       ('teaching_assignments.status'), ('teaching_assignments.ended_at'), ('teaching_assignments.updated_at'))
      SELECT NOT EXISTS (SELECT c FROM actual EXCEPT SELECT c FROM expected)
         AND NOT EXISTS (SELECT c FROM expected EXCEPT SELECT c FROM actual) $$);
 
@@ -240,6 +249,17 @@ SELECT pg_temp.as_runtime_expect_ok('can enroll a student',
      VALUES ('10000000-0000-4000-8000-0000000000a1', '50000000-0000-4000-8000-0000000000a2', '40000000-0000-4000-8000-0000000000a1', '30000000-0000-4000-8000-0000000000a1', '2026-09-01', '2027-07-31') $$);
 SELECT pg_temp.as_runtime_expect_ok('can end an enrollment as a class change (status and end date)',
   $$ UPDATE enrollments SET status = 'CLASS_CHANGED', end_date = '2026-11-30', updated_at = now() WHERE id = '90000000-0000-4000-8000-0000000000a1' $$);
+SELECT pg_temp.as_runtime_expect_ok('can read subjects and teaching assignments',
+  $$ SELECT (SELECT count(*) FROM subjects) + (SELECT count(*) FROM teaching_assignments) $$);
+SELECT pg_temp.as_runtime_expect_ok('can create a subject in a class',
+  $$ INSERT INTO subjects (school_id, class_id, name, code) VALUES ('10000000-0000-4000-8000-0000000000a1', '40000000-0000-4000-8000-0000000000a1', 'English Language', 'ENG') $$);
+SELECT pg_temp.as_runtime_expect_ok('can rename, recode and deactivate a subject',
+  $$ UPDATE subjects SET name = 'Maths', code = NULL, is_active = false, updated_at = now() WHERE id = '44000000-0000-4000-8000-0000000000a1' $$);
+SELECT pg_temp.as_runtime_expect_ok('can assign a teacher to a subject for a year',
+  $$ INSERT INTO teaching_assignments (school_id, subject_id, academic_year_id, user_id)
+     VALUES ('10000000-0000-4000-8000-0000000000a1', '44000000-0000-4000-8000-0000000000a1', '30000000-0000-4000-8000-0000000000a1', '20000000-0000-4000-8000-000000000002') $$);
+SELECT pg_temp.as_runtime_expect_ok('can end an assignment (status and end time) and keep the row',
+  $$ UPDATE teaching_assignments SET status = 'ENDED', ended_at = now(), updated_at = now() WHERE id = '45000000-0000-4000-8000-0000000000a1' $$);
 SELECT pg_temp.as_runtime_expect_ok('can read audit events',
   $$ SELECT count(*) FROM audit_events $$);
 
@@ -316,6 +336,24 @@ SELECT pg_temp.as_runtime_expect_error('cannot move an enrollment to another stu
   $$ UPDATE enrollments SET student_id = '50000000-0000-4000-8000-0000000000a2' $$, '42501');
 SELECT pg_temp.as_runtime_expect_error('cannot rewrite an enrollment start date',
   $$ UPDATE enrollments SET start_date = '2020-01-01' $$, '42501');
+SELECT pg_temp.as_runtime_expect_error('cannot delete a subject',
+  $$ DELETE FROM subjects $$, '42501');
+SELECT pg_temp.as_runtime_expect_error('cannot move a subject to another class',
+  $$ UPDATE subjects SET class_id = '40000000-0000-4000-8000-0000000000a1' $$, '42501');
+SELECT pg_temp.as_runtime_expect_error('cannot move a subject to another school',
+  $$ UPDATE subjects SET school_id = '10000000-0000-4000-8000-0000000000b1' $$, '42501');
+SELECT pg_temp.as_runtime_expect_error('cannot delete a teaching assignment',
+  $$ DELETE FROM teaching_assignments $$, '42501');
+SELECT pg_temp.as_runtime_expect_error('cannot truncate teaching assignments',
+  $$ TRUNCATE teaching_assignments $$, '42501');
+SELECT pg_temp.as_runtime_expect_error('cannot change an assignment''s teacher',
+  $$ UPDATE teaching_assignments SET user_id = '20000000-0000-4000-8000-000000000001' $$, '42501');
+SELECT pg_temp.as_runtime_expect_error('cannot change an assignment''s subject',
+  $$ UPDATE teaching_assignments SET subject_id = '44000000-0000-4000-8000-0000000000a1' $$, '42501');
+SELECT pg_temp.as_runtime_expect_error('cannot change an assignment''s academic year',
+  $$ UPDATE teaching_assignments SET academic_year_id = '30000000-0000-4000-8000-0000000000a1' $$, '42501');
+SELECT pg_temp.as_runtime_expect_error('cannot move an assignment to another school',
+  $$ UPDATE teaching_assignments SET school_id = '10000000-0000-4000-8000-0000000000b1' $$, '42501');
 SELECT pg_temp.as_runtime_expect_error('cannot read platform staff',
   $$ SELECT count(*) FROM platform_staff $$, '42501');
 SELECT pg_temp.as_runtime_expect_error('cannot read support access grants',

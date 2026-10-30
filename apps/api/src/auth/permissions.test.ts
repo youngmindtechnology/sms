@@ -49,3 +49,28 @@ test("only owner, headteacher and administrator can see dates of birth and guard
     assert.equal(can([role], "students:read"), true, `${role} can still read students`);
   }
 });
+
+test("subjects: only owner, headteacher and administrator can manage subjects and assign teachers; teachers can read, bursars cannot", () => {
+  for (const role of ["OWNER", "HEADTEACHER", "ADMINISTRATOR"]) {
+    assert.equal(can([role], "subjects:manage"), true, role);
+    assert.equal(can([role], "subjects:assign"), true, role);
+  }
+  for (const role of ["TEACHER", "BURSAR"]) {
+    assert.equal(can([role], "subjects:manage"), false, role);
+    assert.equal(can([role], "subjects:assign"), false, role);
+  }
+  assert.equal(can(["TEACHER"], "academics:read"), true);
+  assert.equal(can(["BURSAR"], "academics:read"), false);
+  assert.equal(can(["TEACHER", "BURSAR"], "subjects:manage"), false, "combining two weak roles grants nothing new");
+});
+
+test("the subjects phase changed no existing permission: every role keeps exactly its earlier set", () => {
+  const NEW = new Set(["subjects:manage", "subjects:assign"]);
+  const before = (role: string) => [...permissionsFor([role])].filter((p) => !NEW.has(p)).sort();
+  assert.deepEqual(before("HEADTEACHER"), PERMISSIONS.filter((p) => !NEW.has(p) && p !== "staff:manage").sort());
+  assert.deepEqual(before("ADMINISTRATOR"), [
+    "academics:read", "academics:write", "calendar:manage", "classes:manage", "fees:read", "school:read", "staff:manage", "students:read", "students:sensitive", "students:write",
+  ].sort());
+  assert.deepEqual(before("TEACHER"), ["academics:read", "academics:write", "school:read", "students:read"].sort());
+  assert.deepEqual(before("BURSAR"), ["fees:manage", "fees:read", "payments:record", "school:read", "students:read"].sort());
+});

@@ -18,6 +18,8 @@ export const PERMISSIONS = [
   "academics:write",
   "calendar:manage",
   "classes:manage",
+  "subjects:manage",
+  "subjects:assign",
   "fees:read",
   "fees:manage",
   "payments:record",
@@ -31,7 +33,7 @@ const ROLE_PERMISSIONS: Record<SchoolRole, readonly Permission[]> = {
   OWNER: ALL,
   HEADTEACHER: ALL.filter((p) => p !== "staff:manage"),
   ADMINISTRATOR: [
-    "school:read", "staff:manage", "students:read", "students:write", "students:sensitive", "academics:read", "academics:write", "calendar:manage", "classes:manage", "fees:read",
+    "school:read", "staff:manage", "students:read", "students:write", "students:sensitive", "academics:read", "academics:write", "calendar:manage", "classes:manage", "subjects:manage", "subjects:assign", "fees:read",
   ],
   TEACHER: ["school:read", "students:read", "academics:read", "academics:write"],
   BURSAR: ["school:read", "students:read", "fees:read", "fees:manage", "payments:record"],

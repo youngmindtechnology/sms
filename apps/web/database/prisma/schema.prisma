@@ -109,6 +109,13 @@ enum GuardianRelationship {
   @@map("guardian_relationship")
 }
 
+enum TeachingAssignmentStatus {
+  ACTIVE
+  ENDED
+
+  @@map("teaching_assignment_status")
+}
+
 enum EnrollmentStatus {
   ENROLLED
   PROMOTED
@@ -145,6 +152,7 @@ model School {
   guardians           Guardian[]
   studentGuardians    StudentGuardian[]
   enrollments         Enrollment[]
+  teachingAssignments TeachingAssignment[]
   auditEvents         AuditEvent[]
 
   @@map("schools")
@@ -215,6 +223,7 @@ model SchoolMembership {
   user   User                   @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   roles  SchoolMembershipRole[]
   sessions Session[]
+  teachingAssignments TeachingAssignment[]
 
   @@unique([schoolId, userId])
   @@index([userId])
@@ -250,6 +259,7 @@ model AcademicYear {
   school      School       @relation(fields: [schoolId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   terms       Term[]
   enrollments Enrollment[]
+  teachingAssignments TeachingAssignment[]
 
   @@unique([schoolId, name])
   @@unique([id, schoolId])
@@ -291,15 +301,19 @@ model Class {
 
   school      School       @relation(fields: [schoolId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   enrollments Enrollment[]
+  subjects    Subject[]
 
   @@unique([schoolId, name])
   @@unique([id, schoolId])
   @@map("classes")
 }
 
+/// A subject belongs to ONE class (Primary 4 Maths and Primary 5 Maths are two rows).
+/// Case-insensitive name uniqueness per class is a SQL-only index (subjects_class_id_lower_name_key).
 model Subject {
   id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   schoolId  String   @map("school_id") @db.Uuid
+  classId   String   @map("class_id") @db.Uuid
   name      String
   code      String?
   isActive  Boolean  @default(true) @map("is_active")
@@ -307,11 +321,39 @@ model Subject {
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   school School @relation(fields: [schoolId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  // composite: the class must belong to the same school as the subject
+  class  Class  @relation(fields: [classId, schoolId], references: [id, schoolId], onDelete: Restrict, onUpdate: Restrict)
+  teachingAssignments TeachingAssignment[]
 
-  @@unique([schoolId, name])
-  @@unique([schoolId, code])
+  @@unique([classId, code])
   @@unique([id, schoolId])
+  @@index([classId, schoolId])
   @@map("subjects")
+}
+
+/// A teacher teaching a class-subject in an academic year. Kept as history: ENDED rows are never removed.
+/// The "one ACTIVE row per subject + year + teacher" rule is a partial unique index (SQL-only).
+model TeachingAssignment {
+  id             String                     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  schoolId       String                     @map("school_id") @db.Uuid
+  subjectId      String                     @map("subject_id") @db.Uuid
+  academicYearId String                     @map("academic_year_id") @db.Uuid
+  userId         String                     @map("user_id") @db.Uuid
+  status         TeachingAssignmentStatus   @default(ACTIVE)
+  endedAt        DateTime?                  @map("ended_at") @db.Timestamptz(3)
+  createdAt      DateTime                   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime                   @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  school       School           @relation(fields: [schoolId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  // composite: subject, year and the teacher's membership must all belong to this school
+  subject      Subject          @relation(fields: [subjectId, schoolId], references: [id, schoolId], onDelete: Restrict, onUpdate: Restrict)
+  academicYear AcademicYear     @relation(fields: [academicYearId, schoolId], references: [id, schoolId], onDelete: Restrict, onUpdate: Restrict)
+  membership   SchoolMembership @relation(fields: [schoolId, userId], references: [schoolId, userId], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([subjectId, schoolId])
+  @@index([schoolId, academicYearId])
+  @@index([schoolId, userId])
+  @@map("teaching_assignments")
 }
 
 // ---------------------------------------------------------------------------

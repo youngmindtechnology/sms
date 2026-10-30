@@ -4,6 +4,7 @@ import helmet from "helmet";
 import type { AcademicService } from "./academic/academicService.js";
 import type { AuthService } from "./auth/authService.js";
 import type { ClassService } from "./classes/classService.js";
+import type { SubjectService } from "./subjects/subjectService.js";
 import type { EnrollmentService } from "./students/enrollmentService.js";
 import type { GuardianService } from "./students/guardianService.js";
 import type { StudentService } from "./students/studentService.js";
@@ -15,6 +16,7 @@ import { createClassRouter } from "./routes/classes.js";
 import { createEnrollmentRouter } from "./routes/enrollments.js";
 import { createGuardianRouter } from "./routes/guardians.js";
 import { createStaffRouter } from "./routes/staff.js";
+import { createSubjectRouter, createTeachingAssignmentRouter } from "./routes/subjects.js";
 import { createStudentRouter } from "./routes/students.js";
 import type { StaffService } from "./staff/staffService.js";
 import { createAuthRouter, type AuthRouteOptions } from "./routes/auth.js";
@@ -26,6 +28,7 @@ export interface AppOptions {
   academic?: AcademicService;
   classes?: ClassService;
   staff?: StaffService;
+  subjects?: SubjectService;
   /** Students, guardians and enrollments are enabled together. */
   students?: { students: StudentService; guardians: GuardianService; enrollments: EnrollmentService };
   authRoutes?: AuthRouteOptions;
@@ -88,6 +91,11 @@ export function createApp(options: AppOptions = {}) {
 
   if (options.config && options.auth && options.staff) {
     app.use("/api/staff", createStaffRouter(options.auth, options.staff, options.config));
+  }
+
+  if (options.config && options.auth && options.subjects) {
+    app.use("/api/subjects", createSubjectRouter(options.auth, options.subjects, options.config));
+    app.use("/api/teaching-assignments", createTeachingAssignmentRouter(options.auth, options.subjects, options.config));
   }
 
   app.use(errorHandler);

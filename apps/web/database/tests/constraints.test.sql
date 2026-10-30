@@ -292,17 +292,96 @@ SELECT pg_temp.expect_true('two schools may both have a class named "Primary 4"'
 SELECT pg_temp.expect_error('duplicate class name in the same school is rejected',
   $$ INSERT INTO classes (school_id, name, level) VALUES ('10000000-0000-4000-8000-0000000000a1', 'Primary 4', 'PRIMARY') $$,
   '23505', 'classes_school_id_name_key');
-SELECT pg_temp.expect_ok('two schools may both have a subject named "Mathematics"',
-  $$ INSERT INTO subjects (school_id, name, code) VALUES
-       ('10000000-0000-4000-8000-0000000000a1', 'Mathematics', 'MATH'),
-       ('10000000-0000-4000-8000-0000000000b1', 'Mathematics', 'MATH') $$);
-SELECT pg_temp.expect_error('duplicate subject name in the same school is rejected',
-  $$ INSERT INTO subjects (school_id, name) VALUES ('10000000-0000-4000-8000-0000000000a1', 'Mathematics') $$,
-  '23505', 'subjects_school_id_name_key');
-SELECT pg_temp.expect_ok('several subjects without a code are allowed in one school (NULL codes do not collide)',
-  $$ INSERT INTO subjects (school_id, name) VALUES
-       ('10000000-0000-4000-8000-0000000000a1', 'Art'),
-       ('10000000-0000-4000-8000-0000000000a1', 'Music') $$);
+-- Fixture classes for the subject and teaching-assignment tests.
+INSERT INTO classes (id, school_id, name, level, sort_order) VALUES
+  ('41000000-0000-4000-8000-0000000000a1', '10000000-0000-4000-8000-0000000000a1', 'Subj Primary 4', 'PRIMARY', 40),
+  ('41000000-0000-4000-8000-0000000000a2', '10000000-0000-4000-8000-0000000000a1', 'Subj Primary 5', 'PRIMARY', 41),
+  ('41000000-0000-4000-8000-0000000000b1', '10000000-0000-4000-8000-0000000000b1', 'Subj Primary 4', 'PRIMARY', 40);
+
+SELECT pg_temp.expect_ok('the same subject name in two classes of one school is allowed (Primary 4 Maths, Primary 5 Maths)',
+  $$ INSERT INTO subjects (id, school_id, class_id, name, code) VALUES
+       ('42000000-0000-4000-8000-0000000000a1', '10000000-0000-4000-8000-0000000000a1', '41000000-0000-4000-8000-0000000000a1', 'Mathematics', 'MATH'),
+       ('42000000-0000-4000-8000-0000000000a2', '10000000-0000-4000-8000-0000000000a1', '41000000-0000-4000-8000-0000000000a2', 'Mathematics', 'MATH') $$);
+SELECT pg_temp.expect_ok('two schools may both have a subject named "Mathematics" in a class of the same name',
+  $$ INSERT INTO subjects (id, school_id, class_id, name, code) VALUES
+       ('42000000-0000-4000-8000-0000000000b1', '10000000-0000-4000-8000-0000000000b1', '41000000-0000-4000-8000-0000000000b1', 'Mathematics', 'MATH') $$);
+SELECT pg_temp.expect_error('duplicate subject name in the same class is rejected',
+  $$ INSERT INTO subjects (school_id, class_id, name) VALUES ('10000000-0000-4000-8000-0000000000a1', '41000000-0000-4000-8000-0000000000a1', 'Mathematics') $$,
+  '23505', 'subjects_class_id_lower_name_key');
+SELECT pg_temp.expect_error('duplicate subject name is rejected whatever the letter case',
+  $$ INSERT INTO subjects (school_id, class_id, name) VALUES ('10000000-0000-4000-8000-0000000000a1', '41000000-0000-4000-8000-0000000000a1', 'MATHEMATICS') $$,
+  '23505', 'subjects_class_id_lower_name_key');
+SELECT pg_temp.expect_error('duplicate subject code in the same class is rejected',
+  $$ INSERT INTO subjects (school_id, class_id, name, code) VALUES ('10000000-0000-4000-8000-0000000000a1', '41000000-0000-4000-8000-0000000000a1', 'Maths Extra', 'MATH') $$,
+  '23505', 'subjects_class_id_code_key');
+SELECT pg_temp.expect_ok('several subjects without a code are allowed in one class (NULL codes do not collide)',
+  $$ INSERT INTO subjects (school_id, class_id, name) VALUES
+       ('10000000-0000-4000-8000-0000000000a1', '41000000-0000-4000-8000-0000000000a1', 'Art'),
+       ('10000000-0000-4000-8000-0000000000a1', '41000000-0000-4000-8000-0000000000a1', 'Music') $$);
+SELECT pg_temp.expect_error('a subject cannot be created without a class',
+  $$ INSERT INTO subjects (school_id, name) VALUES ('10000000-0000-4000-8000-0000000000a1', 'Orphan') $$, '23502');
+SELECT pg_temp.expect_error('a subject cannot point at another school''s class',
+  $$ INSERT INTO subjects (school_id, class_id, name) VALUES ('10000000-0000-4000-8000-0000000000a1', '41000000-0000-4000-8000-0000000000b1', 'Cross School') $$,
+  '23503', 'subjects_class_id_school_id_fkey');
+SELECT pg_temp.expect_error('a class that has subjects cannot be deleted',
+  $$ DELETE FROM classes WHERE id = '41000000-0000-4000-8000-0000000000a1' $$, '23503,23001');
+SELECT pg_temp.expect_error('a subject name with leading or trailing spaces is rejected',
+  $$ INSERT INTO subjects (school_id, class_id, name) VALUES ('10000000-0000-4000-8000-0000000000a1', '41000000-0000-4000-8000-0000000000a1', ' Padded ') $$,
+  '23514', 'subjects_name_chk');
+
+-- ---- Teaching assignments ----------------------------------------------
+-- Teacher One belongs to school Alpha only; Teacher B to school Bravo only. The existing
+-- "Test Teacher" (user ...0002, school Alpha) is the second Alpha teacher. Years: 2026/2027 (a1)
+-- and the older 2025/2026 (a0) already exist above.
+INSERT INTO users (id, email, full_name, status) VALUES
+  ('21000000-0000-4000-8000-000000000001', 'teacher.one@example.test', 'Teacher One', 'ACTIVE'),
+  ('21000000-0000-4000-8000-000000000003', 'teacher.b@example.test', 'Teacher B', 'ACTIVE');
+INSERT INTO school_memberships (id, school_id, user_id, status) VALUES
+  ('71000000-0000-4000-8000-0000000000a3', '10000000-0000-4000-8000-0000000000a1', '21000000-0000-4000-8000-000000000001', 'ACTIVE'),
+  ('71000000-0000-4000-8000-0000000000b3', '10000000-0000-4000-8000-0000000000b1', '21000000-0000-4000-8000-000000000003', 'ACTIVE');
+
+SELECT pg_temp.expect_ok('a teacher of the school can be assigned to a subject for a year',
+  $$ INSERT INTO teaching_assignments (id, school_id, subject_id, academic_year_id, user_id) VALUES
+       ('43000000-0000-4000-8000-0000000000a1', '10000000-0000-4000-8000-0000000000a1', '42000000-0000-4000-8000-0000000000a1', '30000000-0000-4000-8000-0000000000a1', '21000000-0000-4000-8000-000000000001') $$);
+SELECT pg_temp.expect_ok('several teachers may teach the same subject in the same year',
+  $$ INSERT INTO teaching_assignments (school_id, subject_id, academic_year_id, user_id) VALUES
+       ('10000000-0000-4000-8000-0000000000a1', '42000000-0000-4000-8000-0000000000a1', '30000000-0000-4000-8000-0000000000a1', '20000000-0000-4000-8000-000000000002') $$);
+SELECT pg_temp.expect_ok('the same teacher may teach the same subject in another year',
+  $$ INSERT INTO teaching_assignments (school_id, subject_id, academic_year_id, user_id) VALUES
+       ('10000000-0000-4000-8000-0000000000a1', '42000000-0000-4000-8000-0000000000a1', '30000000-0000-4000-8000-0000000000a0', '21000000-0000-4000-8000-000000000001') $$);
+SELECT pg_temp.expect_error('a duplicate ACTIVE assignment (same subject, year and teacher) is rejected',
+  $$ INSERT INTO teaching_assignments (school_id, subject_id, academic_year_id, user_id) VALUES
+       ('10000000-0000-4000-8000-0000000000a1', '42000000-0000-4000-8000-0000000000a1', '30000000-0000-4000-8000-0000000000a1', '21000000-0000-4000-8000-000000000001') $$,
+  '23505', 'teaching_assignments_one_active_key');
+SELECT pg_temp.expect_ok('an assignment can be ended, keeping the row as history',
+  $$ UPDATE teaching_assignments SET status = 'ENDED', ended_at = now() WHERE id = '43000000-0000-4000-8000-0000000000a1' $$);
+SELECT pg_temp.expect_ok('after ending, the same teacher can be assigned again (the ended row is history)',
+  $$ INSERT INTO teaching_assignments (school_id, subject_id, academic_year_id, user_id) VALUES
+       ('10000000-0000-4000-8000-0000000000a1', '42000000-0000-4000-8000-0000000000a1', '30000000-0000-4000-8000-0000000000a1', '21000000-0000-4000-8000-000000000001') $$);
+SELECT pg_temp.expect_true('the ended assignment is still stored',
+  $$ SELECT count(*) = 1 FROM teaching_assignments WHERE id = '43000000-0000-4000-8000-0000000000a1' AND status = 'ENDED' $$);
+SELECT pg_temp.expect_error('an ENDED assignment must have an end time',
+  $$ UPDATE teaching_assignments SET status = 'ENDED', ended_at = NULL WHERE subject_id = '42000000-0000-4000-8000-0000000000a1' AND academic_year_id = '30000000-0000-4000-8000-0000000000a0' $$,
+  '23514', 'teaching_assignments_status_ended_chk');
+SELECT pg_temp.expect_error('an ACTIVE assignment cannot carry an end time',
+  $$ UPDATE teaching_assignments SET ended_at = now() WHERE subject_id = '42000000-0000-4000-8000-0000000000a1' AND academic_year_id = '30000000-0000-4000-8000-0000000000a0' $$,
+  '23514', 'teaching_assignments_status_ended_chk');
+SELECT pg_temp.expect_error('a teacher from another school cannot be assigned',
+  $$ INSERT INTO teaching_assignments (school_id, subject_id, academic_year_id, user_id) VALUES
+       ('10000000-0000-4000-8000-0000000000a1', '42000000-0000-4000-8000-0000000000a2', '30000000-0000-4000-8000-0000000000a1', '21000000-0000-4000-8000-000000000003') $$,
+  '23503', 'teaching_assignments_school_id_user_id_fkey');
+SELECT pg_temp.expect_error('a subject from another school cannot be used',
+  $$ INSERT INTO teaching_assignments (school_id, subject_id, academic_year_id, user_id) VALUES
+       ('10000000-0000-4000-8000-0000000000a1', '42000000-0000-4000-8000-0000000000b1', '30000000-0000-4000-8000-0000000000a1', '21000000-0000-4000-8000-000000000001') $$,
+  '23503', 'teaching_assignments_subject_id_school_id_fkey');
+SELECT pg_temp.expect_error('an academic year from another school cannot be used',
+  $$ INSERT INTO teaching_assignments (school_id, subject_id, academic_year_id, user_id) VALUES
+       ('10000000-0000-4000-8000-0000000000b1', '42000000-0000-4000-8000-0000000000b1', '30000000-0000-4000-8000-0000000000a1', '21000000-0000-4000-8000-000000000003') $$,
+  '23503', 'teaching_assignments_academic_year_id_school_id_fkey');
+SELECT pg_temp.expect_error('a subject that has assignments cannot be deleted',
+  $$ DELETE FROM subjects WHERE id = '42000000-0000-4000-8000-0000000000a1' $$, '23503,23001');
+SELECT pg_temp.expect_error('a membership that has assignments cannot be deleted',
+  $$ DELETE FROM school_memberships WHERE id = '71000000-0000-4000-8000-0000000000a3' $$, '23503,23001');
 
 -- ---- Guardians ----------------------------------------------------------
 SELECT pg_temp.expect_true('one guardian can be linked to several students',
@@ -422,8 +501,8 @@ SELECT pg_temp.expect_true('every table has a NOT NULL school_id unless explicit
             SELECT 1 FROM information_schema.columns c
              WHERE c.table_schema = 'public' AND c.table_name = t.table_name
                AND c.column_name = 'school_id' AND c.is_nullable = 'NO')) $$);
-SELECT pg_temp.expect_true('the structural check covers the 10 school-owned tables',
-  $$ SELECT count(*) = 10 FROM information_schema.columns
+SELECT pg_temp.expect_true('the structural check covers the 11 school-owned tables',
+  $$ SELECT count(*) = 11 FROM information_schema.columns
       WHERE table_schema = 'public' AND column_name = 'school_id' AND is_nullable = 'NO' $$);
 
 -- ---- Defaults ----------------------------------------------------------

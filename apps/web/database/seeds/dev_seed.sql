@@ -124,12 +124,13 @@ INSERT INTO classes (id, school_id, name, level, sort_order) VALUES
   (pg_temp.sid('class:harvest:j1'),  pg_temp.sid('school:harvest'), 'JHS 1',         'JHS',         13)
 ON CONFLICT DO NOTHING;
 
-INSERT INTO subjects (id, school_id, name, code) VALUES
-  (pg_temp.sid('subject:sunrise:eng'),  pg_temp.sid('school:sunrise'), 'English Language', 'ENG'),
-  (pg_temp.sid('subject:sunrise:math'), pg_temp.sid('school:sunrise'), 'Mathematics',      'MATH'),
-  (pg_temp.sid('subject:sunrise:sci'),  pg_temp.sid('school:sunrise'), 'Integrated Science','SCI'),
-  (pg_temp.sid('subject:harvest:eng'),  pg_temp.sid('school:harvest'), 'English Language', 'ENG'),
-  (pg_temp.sid('subject:harvest:math'), pg_temp.sid('school:harvest'), 'Mathematics',      'MATH')
+INSERT INTO subjects (id, school_id, class_id, name, code) VALUES
+  (pg_temp.sid('subject:sunrise:p4a:eng'),  pg_temp.sid('school:sunrise'), pg_temp.sid('class:sunrise:p4a'), 'English Language', 'ENG'),
+  (pg_temp.sid('subject:sunrise:p4a:math'), pg_temp.sid('school:sunrise'), pg_temp.sid('class:sunrise:p4a'), 'Mathematics',      'MATH'),
+  (pg_temp.sid('subject:sunrise:p3:math'),  pg_temp.sid('school:sunrise'), pg_temp.sid('class:sunrise:p3'),  'Mathematics',      'MATH'),
+  (pg_temp.sid('subject:sunrise:j1:sci'),   pg_temp.sid('school:sunrise'), pg_temp.sid('class:sunrise:j1'),  'Integrated Science','SCI'),
+  (pg_temp.sid('subject:harvest:p4:eng'),   pg_temp.sid('school:harvest'), pg_temp.sid('class:harvest:p4'),  'English Language', 'ENG'),
+  (pg_temp.sid('subject:harvest:p4:math'),  pg_temp.sid('school:harvest'), pg_temp.sid('class:harvest:p4'),  'Mathematics',      'MATH')
 ON CONFLICT DO NOTHING;
 
 -- ---------------------------------------------------------------------------
